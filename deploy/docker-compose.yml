@@ -1,0 +1,26 @@
+# Production stack for finstats (rootless Podman on the Oracle host).
+#
+# TLS termination is NOT here: the Caddy container from the ratikka stack owns
+# :80/:443 on this host and reverse-proxies finstats.duckdns.org to this
+# backend over the shared external `web-proxy` network.
+#
+# finstats has no database or cache — the browser calls Statistics Finland
+# directly — so this is a single stateless container.
+services:
+  finstats:
+    image: ghcr.io/saavuori/finstats:latest
+    container_name: finstats
+    restart: unless-stopped
+    environment:
+      - PORT=8080
+    networks:
+      - default
+      - web-proxy
+
+networks:
+  # `default` must be declared explicitly: the podman-compose on the host errors
+  # with "missing networks: default" when a service names it but the top-level
+  # networks block doesn't define it.
+  default:
+  web-proxy:
+    external: true
