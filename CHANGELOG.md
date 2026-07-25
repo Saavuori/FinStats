@@ -3,6 +3,20 @@
 All notable changes to this project are documented here. The version headings
 match the tags CI generates on each push to `main`.
 
+## [v0.1.1] - 2026-07-25
+
+### Added
+- **One-command install**: `deploy/install.sh <domain>` sets up the whole
+  deployment on a Podman or Docker host behind Caddy — compose files, the shared
+  `web-proxy` network, the TLS vhost, and the auto-update cron — with the public
+  domain as its only required argument. Re-running it updates in place.
+
+### Changed
+- `deploy/update.sh` resolves its own directory and detects the container
+  engine, so it works from any install directory under Podman or Docker.
+- The live deployment is `tilastokeskus.duckdns.org`; the domain is no longer
+  hardcoded anywhere in the deployment tooling.
+
 ## [v0.1.0] - 2026-07-23
 
 ### Added

@@ -35,7 +35,7 @@ frontend/src/lib/jsonstat.ts    JSON-stat v2 -> tidy "cube"
 frontend/src/lib/wfs.ts         municipality GeoJSON + the region-code join
 frontend/src/components/        TableBrowser, DimensionSelect, ChartView, MapView
 scripts/build-changelog.js      CHANGELOG.md -> dist-changelog/index.html for Pages
-deploy/                         production compose + cron auto-update script
+deploy/                         install.sh (domain as arg) + compose + cron auto-update
 ```
 
 ## Local development
@@ -82,5 +82,7 @@ See `docs/DATA_SOURCES.md` for the full contract and quirks.
 Push to `main` → CI tags, builds a multi-arch image, pushes to
 `ghcr.io/saavuori/finstats:latest`. The Oracle host runs a 5-minute cron
 (`deploy/update.sh`) that pulls and redeploys. TLS is terminated by the Caddy
-container in the *ratikka* stack, which proxies `finstats.duckdns.org` over the
-shared external `web-proxy` podman network. See `docs/DEPLOYMENT.md`.
+container in the *ratikka* stack, which proxies the public domain over the
+shared external `web-proxy` podman network (live: `tilastokeskus.duckdns.org`).
+`deploy/install.sh <domain>` does the whole host setup and takes the domain as a
+parameter — nothing else hardcodes it. See `docs/DEPLOYMENT.md`.
