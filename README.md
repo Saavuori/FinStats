@@ -76,13 +76,60 @@ docker run --rm -p 8080:8080 finstats
 
 Details, limits and quirks: [`docs/DATA_SOURCES.md`](docs/DATA_SOURCES.md).
 
-## Deployment & CI/CD
+## Run it on your own server
 
-Push to `main` → GitHub Actions tags a release, builds a multi-arch image and
-pushes it to `ghcr.io/saavuori/finstats`; the Oracle host auto-deploys within
-five minutes. The changelog is published to GitHub Pages. Full runbook:
-[`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md). Release notes:
-[`CHANGELOG.md`](CHANGELOG.md).
+finstats ships as a single stateless container behind a
+[Caddy](https://caddyserver.com/) reverse proxy that terminates TLS and gets a
+certificate from Let's Encrypt automatically. One command sets the whole thing
+up — **the domain is the only argument**:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Saavuori/FinStats/main/deploy/install.sh | bash -s -- your-domain.example.org
+```
+
+Before running it:
+
+- **Point DNS at the host** — an A/AAAA record for your domain (a free
+  `*.duckdns.org` name works fine; the reference deployment uses
+  `tilastokeskus.duckdns.org`). Caddy issues the certificate on the first
+  request once it resolves.
+- **Open ports 80 and 443** to the host, and have Podman (rootless is fine) or
+  Docker with a compose plugin installed.
+
+The installer picks whichever engine you have, drops
+[`deploy/docker-compose.yml`](deploy/docker-compose.yml) and
+[`deploy/update.sh`](deploy/update.sh) into `~/finstats` (override with a second
+argument), creates the shared `web-proxy` network, starts the container, adds a
+site block to your `Caddyfile`, reloads Caddy, and registers a cron entry that
+keeps the deployment up to date. It is idempotent — run it again to update.
+
+If you have no Caddy running yet, start one that mounts a `Caddyfile` and joins
+the `web-proxy` network; the installer prints the exact site block to add when
+it can't find an existing config:
+
+```
+your-domain.example.org {
+    reverse_proxy finstats:8080
+    encode gzip zstd
+}
+```
+
+Verify:
+
+```bash
+curl -s https://your-domain.example.org/api/health
+```
+
+No secrets, no database, no volumes — the container only serves the SPA, and the
+browser talks to Statistics Finland directly. Full runbook, engine overrides and
+uninstall steps: [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md).
+
+## CI/CD
+
+Push to `main` → GitHub Actions tags a release, builds a multi-arch
+(`amd64` + `arm64`) image and pushes it to `ghcr.io/saavuori/finstats`; every
+host running `update.sh` picks it up within five minutes. The changelog is
+published to GitHub Pages. Release notes: [`CHANGELOG.md`](CHANGELOG.md).
 
 ## Licence
 

@@ -1,8 +1,9 @@
 # Production stack for finstats (rootless Podman on the Oracle host).
 #
 # TLS termination is NOT here: the Caddy container from the ratikka stack owns
-# :80/:443 on this host and reverse-proxies finstats.duckdns.org to this
-# backend over the shared external `web-proxy` network.
+# :80/:443 on this host and reverse-proxies the public domain (passed to
+# deploy/install.sh) to this backend over the shared external `web-proxy`
+# network.
 #
 # finstats has no database or cache — the browser calls Statistics Finland
 # directly — so this is a single stateless container.

@@ -1,0 +1,4 @@
+# Shell scripts must keep LF endings: deploy/*.sh run on the Linux host, and a
+# Windows checkout with core.autocrlf=true would otherwise hand them CRLF, which
+# breaks the shebang line.
+*.sh text eol=lf
