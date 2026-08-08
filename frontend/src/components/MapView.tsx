@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import maplibregl from 'maplibre-gl'
+import * as maplibregl from 'maplibre-gl'
 import type { FeatureCollection } from 'geojson'
 import type { Cube } from '../lib/jsonstat'
 import { fetchMunicipalities, normaliseCode } from '../lib/wfs'
@@ -135,7 +135,7 @@ function MapView({ cube, theme }: Props) {
     })
 
     const popup = new maplibregl.Popup({ closeButton: false, closeOnClick: false })
-    m.on('mousemove', 'region-fill', (e) => {
+    m.on('mousemove', 'region-fill', (e: maplibregl.MapLayerMouseEvent) => {
       m.getCanvas().style.cursor = 'pointer'
       const p = e.features?.[0]?.properties
       if (!p) return
