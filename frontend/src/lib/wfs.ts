@@ -3,8 +3,8 @@
 // in WGS84 (EPSG:4326) so MapLibre can render it directly. CC BY 4.0.
 //
 // The join key: WFS features carry `kunta` as a 3-digit code ("020"); StatFin
-// region codes are the same number prefixed with "KU" ("KU020"). normaliseCode
-// reduces both to the bare digits.
+// municipality codes are the same number prefixed with "KU" ("KU020").
+// municipalityCode reduces both to the bare digits.
 
 import type { FeatureCollection } from 'geojson'
 
@@ -14,10 +14,16 @@ const WFS =
   '&typeName=tilastointialueet:kunta4500k' +
   '&outputFormat=application/json&srsName=EPSG:4326'
 
-/** Reduce a StatFin region code or WFS kunta code to comparable bare digits. */
-export function normaliseCode(code: string): string {
-  const digits = code.replace(/\D/g, '')
-  return digits.padStart(3, '0')
+/**
+ * The bare 3-digit municipality code of a StatFin region code ("KU020") or a
+ * WFS kunta code ("020"), or null for anything that isn't a municipality. A
+ * region dimension also holds the whole country ("SSS") and larger areas whose
+ * codes carry the same digits ("MK05" is a region, "SK091" a sub-region); those
+ * must not be joined to municipality 005 or 091.
+ */
+export function municipalityCode(code: string): string | null {
+  const m = /^(?:KU)?(\d{1,3})$/.exec(code)
+  return m ? m[1].padStart(3, '0') : null
 }
 
 let cache: Promise<FeatureCollection> | null = null
@@ -28,6 +34,11 @@ export function fetchMunicipalities(): Promise<FeatureCollection> {
     cache = fetch(WFS).then((res) => {
       if (!res.ok) throw new Error(`WFS returned ${res.status}`)
       return res.json() as Promise<FeatureCollection>
+    })
+    // Forget a failed fetch, so the next map mount retries instead of reusing
+    // the rejection for the rest of the session.
+    cache.catch(() => {
+      cache = null
     })
   }
   return cache
