@@ -6,8 +6,6 @@ interface Props {
   variable: Variable
   selected: string[]
   onChange: (values: string[]) => void
-  /** Single-select collapses the control to one value (used by the map view). */
-  single?: boolean
 }
 
 /**
@@ -15,7 +13,7 @@ interface Props {
  * values (sex) to ~600 (municipalities), so it has a filter box and bulk
  * actions. Collapsed, it summarises the current pick; open, it lists values.
  */
-function DimensionSelect({ variable, selected, onChange, single }: Props) {
+function DimensionSelect({ variable, selected, onChange }: Props) {
   const [open, setOpen] = useState(false)
   const [filter, setFilter] = useState('')
 
@@ -30,11 +28,6 @@ function DimensionSelect({ variable, selected, onChange, single }: Props) {
   const selectedSet = new Set(selected)
 
   function toggle(code: string) {
-    if (single) {
-      onChange([code])
-      setOpen(false)
-      return
-    }
     const next = new Set(selectedSet)
     if (next.has(code)) next.delete(code)
     else next.add(code)
@@ -77,30 +70,24 @@ function DimensionSelect({ variable, selected, onChange, single }: Props) {
             </div>
           )}
 
-          {!single && (
-            <div className="dim-actions">
-              <button onClick={() => onChange(variable.values.map((v) => v.code))}>
-                Select all
+          <div className="dim-actions">
+            <button onClick={() => onChange(variable.values.map((v) => v.code))}>
+              Select all
+            </button>
+            <button onClick={() => onChange([])}>Clear</button>
+            {variable.time && (
+              <button onClick={() => onChange(variable.values.slice(-12).map((v) => v.code))}>
+                Latest 12
               </button>
-              <button onClick={() => onChange([])}>Clear</button>
-              {variable.time && (
-                <button
-                  onClick={() =>
-                    onChange(variable.values.slice(-12).map((v) => v.code))
-                  }
-                >
-                  Latest 12
-                </button>
-              )}
-            </div>
-          )}
+            )}
+          </div>
 
           <ul className="dim-list">
             {filtered.slice(0, 400).map((v) => (
               <li key={v.code}>
                 <label>
                   <input
-                    type={single ? 'radio' : 'checkbox'}
+                    type="checkbox"
                     checked={selectedSet.has(v.code)}
                     onChange={() => toggle(v.code)}
                   />

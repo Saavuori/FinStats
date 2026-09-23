@@ -10,6 +10,7 @@
 // query, 40 calls / 60 s. We keep queries small and debounce the UI.
 
 import type { DbNode, TableMeta, Variable } from '../types'
+import type { RawJsonStat } from './jsonstat'
 
 const ROOT = 'https://pxdata.stat.fi/PxWeb/api/v1'
 
@@ -80,13 +81,21 @@ function isContent(v: { code: string; text: string }): boolean {
   )
 }
 
-/** Does this variable hold geographic areas we can put on the map? */
-export function isRegion(v: Variable): boolean {
+/**
+ * Does a variable hold geographic areas we can put on the map? The one region
+ * heuristic for both the table metadata (which enables the Map tab) and the
+ * json-stat cube (which MapView draws), so the two can never disagree.
+ */
+export function looksLikeRegion(code: string, label: string, valueCodes: string[]): boolean {
   return (
-    /^alue/i.test(v.code) ||
-    /^(area|alue|område)$/i.test(v.label) ||
-    v.values.some((val) => /^(KU|MK|SK|MA)\d/.test(val.code))
+    /^alue/i.test(code) ||
+    /^(area|alue|område)$/i.test(label) ||
+    valueCodes.some((c) => /^(KU|MK|SK|MA)\d/.test(c))
   )
+}
+
+export function isRegion(v: Variable): boolean {
+  return looksLikeRegion(v.code, v.label, v.values.map((val) => val.code))
 }
 
 interface RawMeta {
@@ -121,19 +130,19 @@ export async function getMeta(url: string): Promise<TableMeta> {
 /** One entry of the POST body's `query` array. */
 interface QueryItem {
   code: string
-  selection: { filter: 'item' | 'all' | 'top'; values: string[] }
+  selection: { filter: 'item'; values: string[] }
 }
 
 /**
  * POST a selection and get back a json-stat2 dataset. `selections` maps a
- * variable code to the value codes to include; a variable omitted here is sent
- * with its full range only if it is the time axis (via `top`) — callers always
- * pass every non-eliminable variable, so this stays within the cell limit.
+ * variable code to the value codes to include; a variable with no values is
+ * left out of the query, which PxWeb only accepts for eliminable variables —
+ * the caller waits until every variable has a pick before querying.
  */
 export async function queryTable(
   url: string,
   selections: Record<string, string[]>,
-): Promise<unknown> {
+): Promise<RawJsonStat> {
   const query: QueryItem[] = Object.entries(selections)
     .filter(([, values]) => values.length > 0)
     .map(([code, values]) => ({
@@ -156,5 +165,5 @@ export async function queryTable(
   if (!res.ok) {
     throw new Error(`Statistics Finland API returned ${res.status}. Check the selection.`)
   }
-  return res.json()
+  return res.json() as Promise<RawJsonStat>
 }

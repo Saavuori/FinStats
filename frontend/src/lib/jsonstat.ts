@@ -6,6 +6,8 @@
 // position) and labels. We unfold that into tidy records the chart and map can
 // slice independently. Spec: https://json-stat.org/full/
 
+import { looksLikeRegion } from './pxweb'
+
 export interface CubeCategory {
   code: string
   label: string
@@ -47,7 +49,8 @@ interface RawDimension {
   }
 }
 
-interface RawJsonStat {
+/** The json-stat2 dataset PxWeb returns for a query. */
+export interface RawJsonStat {
   label?: string
   source?: string
   updated?: string
@@ -70,20 +73,16 @@ function orderedCategories(dim: RawDimension): CubeCategory[] {
   return codesByPos.map((code) => ({ code, label: label?.[code] ?? code }))
 }
 
-/** Detect a region dimension when the API didn't tag one via role.geo. */
-function looksGeographic(id: string, cats: CubeCategory[]): boolean {
-  if (/^alue/i.test(id)) return true
-  return cats.some((c) => /^(KU|MK|SK|MA)\d/.test(c.code))
-}
-
 export function parseJsonStat(raw: RawJsonStat): Cube {
   const dims: CubeDim[] = raw.id.map((id) => {
     const cats = orderedCategories(raw.dimension[id])
+    const label = raw.dimension[id].label ?? id
     let role: DimRole = 'other'
     if (raw.role?.time?.includes(id)) role = 'time'
-    else if (raw.role?.geo?.includes(id) || looksGeographic(id, cats)) role = 'geo'
+    else if (raw.role?.geo?.includes(id) || looksLikeRegion(id, label, cats.map((c) => c.code)))
+      role = 'geo'
     else if (raw.role?.metric?.includes(id)) role = 'metric'
-    return { id, label: raw.dimension[id].label ?? id, categories: cats, role }
+    return { id, label, categories: cats, role }
   })
 
   // Strides for the row-major flat value array: the last dimension is contiguous.
@@ -126,12 +125,4 @@ export function parseJsonStat(raw: RawJsonStat): Cube {
     geoDim: dims.find((d) => d.role === 'geo')?.id,
     metricDim: metricDim?.id,
   }
-}
-
-/** Look up one observation by its full dimension key. */
-export function valueAt(cube: Cube, key: Record<string, string>): number | null {
-  const hit = cube.records.find((r) =>
-    Object.entries(key).every(([k, v]) => r.key[k] === v),
-  )
-  return hit ? hit.value : null
 }

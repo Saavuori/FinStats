@@ -33,35 +33,3 @@ export interface TableMeta {
   title: string
   variables: Variable[]
 }
-
-/** The user's current pick for one variable. */
-export interface Selection {
-  code: string
-  values: string[]
-}
-
-/** A tidy, chart-ready row: one observation with its dimension labels. */
-export interface DataPoint {
-  /** Key of the category on the x-axis (time period or category code). */
-  x: string
-  xLabel: string
-  /** Series key — the value code that distinguishes this line/bar. */
-  series: string
-  seriesLabel: string
-  value: number | null
-  /** Region code, present only when a geographic variable was selected. */
-  region?: string
-}
-
-/** Parsed, flattened result of a data query plus the axes the UI should use. */
-export interface Dataset {
-  label: string
-  source: string
-  updated: string
-  unit: string
-  points: DataPoint[]
-  /** Ordered, de-duplicated x categories (preserves API order). */
-  xCategories: { code: string; label: string }[]
-  /** Ordered, de-duplicated series. */
-  seriesList: { code: string; label: string }[]
-}
