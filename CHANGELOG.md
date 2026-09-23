@@ -3,6 +3,24 @@
 All notable changes to this project are documented here. The version headings
 match the tags CI generates on each push to `main`.
 
+## [v0.0.22] - 2026-09-23
+
+### Fixed
+- **Map values**: Regions, sub-regions and the whole-country total in a
+  table's area dimension no longer overwrite municipalities that share their
+  digits (`SK091` was shown as Helsinki) or stretch the colour ramp.
+- **Map stability**: Switching the theme on the map view no longer pushes data
+  into a map whose style is still loading; the hover popup shows the current
+  unit and renders names as text; the period and measure pickers fall back to
+  a valid value when the selection changes; a failed boundary download is
+  reported and retried.
+- **Stale data**: A slow query or table load can no longer overwrite a newer
+  one, and the chart's series picker falls back to a valid dimension.
+- **Server**: `GET /api` returns 404 instead of the app.
+- **Changelog page**: Bullets and paragraphs that wrap over several lines are
+  rendered whole.
+- **Deployment**: `update.log` is trimmed instead of growing without limit.
+
 ## [v0.1.1] - 2026-07-25
 
 ### Added
