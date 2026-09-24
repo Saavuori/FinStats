@@ -3,7 +3,6 @@ package api
 import (
 	"embed"
 	"io/fs"
-	"log"
 	"net/http"
 	"strings"
 )
@@ -18,33 +17,39 @@ var distFS embed.FS
 
 // ServeStatic serves the embedded frontend build, falling back to index.html so
 // a direct hit on any non-asset path still loads the app rather than 404ing.
-func ServeStatic(w http.ResponseWriter, r *http.Request) {
-	sub, err := fs.Sub(distFS, "dist")
+var ServeStatic = staticHandler(mustSub(distFS, "dist"))
+
+func mustSub(fsys fs.FS, dir string) fs.FS {
+	sub, err := fs.Sub(fsys, dir)
 	if err != nil {
-		log.Printf("failed to get dist FS sub: %v", err)
-		http.Error(w, "internal server error", http.StatusInternalServerError)
-		return
+		panic(err) // only fails for an invalid path literal
 	}
+	return sub
+}
 
-	// Unknown /api/* paths must never fall through to index.html — an API
-	// client asking for a route that doesn't exist deserves a 404, not HTML.
-	if strings.HasPrefix(r.URL.Path, "/api/") {
-		http.NotFound(w, r)
-		return
-	}
-
-	upath := strings.TrimPrefix(r.URL.Path, "/")
-	if upath == "" {
-		upath = "index.html"
-	}
-	if _, err := fs.Stat(sub, upath); err != nil {
-		if _, err := fs.Stat(sub, "index.html"); err != nil {
+func staticHandler(site fs.FS) http.HandlerFunc {
+	files := http.FileServer(http.FS(site))
+	return func(w http.ResponseWriter, r *http.Request) {
+		// Unknown /api/* paths must never fall through to index.html — an API
+		// client asking for a route that doesn't exist deserves a 404, not HTML.
+		if r.URL.Path == "/api" || strings.HasPrefix(r.URL.Path, "/api/") {
 			http.NotFound(w, r)
 			return
 		}
-		r = r.Clone(r.Context())
-		r.URL.Path = "/"
-	}
 
-	http.FileServer(http.FS(sub)).ServeHTTP(w, r)
+		upath := strings.TrimPrefix(r.URL.Path, "/")
+		if upath == "" {
+			upath = "index.html"
+		}
+		if _, err := fs.Stat(site, upath); err != nil {
+			if _, err := fs.Stat(site, "index.html"); err != nil {
+				http.NotFound(w, r)
+				return
+			}
+			r = r.Clone(r.Context())
+			r.URL.Path = "/"
+		}
+
+		files.ServeHTTP(w, r)
+	}
 }

@@ -29,18 +29,24 @@ function ChartView({ cube }: Props) {
   const [kind, setKind] = useState<'line' | 'bar'>('line')
 
   // Candidate x-axis: prefer time, else the widest dimension.
-  const xDim =
-    cube.dims.find((d) => d.id === cube.timeDim) ??
-    [...cube.dims].sort((a, b) => b.categories.length - a.categories.length)[0]
+  const xDim = useMemo(
+    () =>
+      cube.dims.find((d) => d.id === cube.timeDim) ??
+      [...cube.dims].sort((a, b) => b.categories.length - a.categories.length)[0],
+    [cube],
+  )
 
   // Dimensions that can split into series: anything else with >1 category.
-  const seriesCandidates = cube.dims.filter(
-    (d) => d.id !== xDim.id && d.categories.length > 1,
+  const seriesCandidates = useMemo(
+    () => cube.dims.filter((d) => d.id !== xDim.id && d.categories.length > 1),
+    [cube, xDim],
   )
   const defaultSeries =
     seriesCandidates.find((d) => d.id === cube.metricDim) ?? seriesCandidates[0]
+  // The pick survives a requery only while that dimension can still split
+  // series (it may now have one value, or have become the x-axis).
   const [seriesId, setSeriesId] = useState(defaultSeries?.id ?? '')
-  const seriesDim = cube.dims.find((d) => d.id === seriesId) ?? defaultSeries
+  const seriesDim = seriesCandidates.find((d) => d.id === seriesId) ?? defaultSeries
 
   // Pin every other dimension to its first category.
   const pinned = useMemo(() => {
@@ -78,7 +84,7 @@ function ChartView({ cube }: Props) {
         {seriesCandidates.length > 0 && (
           <label className="mini-select">
             Series
-            <select value={seriesId} onChange={(e) => setSeriesId(e.target.value)}>
+            <select value={seriesDim?.id} onChange={(e) => setSeriesId(e.target.value)}>
               {seriesCandidates.map((d) => (
                 <option key={d.id} value={d.id}>
                   {d.label}

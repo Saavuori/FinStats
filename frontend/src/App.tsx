@@ -6,11 +6,15 @@ import ChartView from './components/ChartView'
 import MapView from './components/MapView'
 import VersionBadge from './components/VersionBadge'
 import { getMeta, queryTable, tableUrl, isRegion, type Lang } from './lib/pxweb'
+import { municipalityCode } from './lib/wfs'
 import { parseJsonStat, type Cube } from './lib/jsonstat'
 import { loadTheme, saveTheme, type Theme } from './lib/theme'
 import type { TableMeta } from './types'
 
 const CELL_LIMIT = 120000
+
+// The UI is English-only for now; PxWeb also serves 'fi' and 'sv'.
+const LANG: Lang = 'en'
 
 interface Picked {
   url: string
@@ -20,8 +24,6 @@ interface Picked {
 
 export default function App() {
   const [theme, setTheme] = useState<Theme>(loadTheme)
-  const [lang] = useState<Lang>('en')
-
   const [picked, setPicked] = useState<Picked | null>(null)
   const [selections, setSelections] = useState<Record<string, string[]>>({})
   const [cube, setCube] = useState<Cube | null>(null)
@@ -48,16 +50,21 @@ export default function App() {
     [picked],
   )
 
-  // Pick a table -> fetch metadata -> seed sensible default selections.
+  // Pick a table -> fetch metadata -> seed sensible default selections. Only
+  // the latest pick may land: a slower response for a table clicked earlier
+  // must not replace it.
+  const metaRequest = useRef(0)
   const onSelectTable = useCallback(
     async (path: string, id: string, title: string) => {
-      const url = tableUrl(lang, path, id)
+      const request = ++metaRequest.current
+      const url = tableUrl(LANG, path, id)
       setLoadingMeta(true)
       setError(null)
       setCube(null)
       setView('chart')
       try {
         const meta = await getMeta(url)
+        if (request !== metaRequest.current) return
         const seed: Record<string, string[]> = {}
         for (const v of meta.variables) {
           if (v.time) {
@@ -72,12 +79,12 @@ export default function App() {
         setSelections(seed)
         setPicked({ url, title, meta })
       } catch (e) {
-        setError(errText(e))
+        if (request === metaRequest.current) setError(errText(e))
       } finally {
-        setLoadingMeta(false)
+        if (request === metaRequest.current) setLoadingMeta(false)
       }
     },
-    [lang],
+    [],
   )
 
   // Estimated response size = product of selected counts.
@@ -86,31 +93,38 @@ export default function App() {
     [selections],
   )
 
-  // Requery whenever the selection changes (debounced).
-  const debTimer = useRef<number | undefined>(undefined)
+  // Derived rather than stored, so it clears as soon as the selection shrinks.
+  const tooLarge =
+    cells > CELL_LIMIT
+      ? `Selection is too large (${cells.toLocaleString()} cells). Narrow it below ${CELL_LIMIT.toLocaleString()}.`
+      : null
+
+  // Requery whenever the selection changes (debounced). A response that
+  // arrives after the selection or table has moved on is dropped, so an older
+  // query can never overwrite a newer one's chart.
   useEffect(() => {
     if (!picked) return
     const anyEmpty = picked.meta.variables.some((v) => (selections[v.code]?.length ?? 0) === 0)
-    if (anyEmpty) return
-    if (cells > CELL_LIMIT) {
-      setError(`Selection is too large (${cells.toLocaleString()} cells). Narrow it below ${CELL_LIMIT.toLocaleString()}.`)
-      return
-    }
+    if (anyEmpty || cells > CELL_LIMIT) return
 
-    window.clearTimeout(debTimer.current)
-    debTimer.current = window.setTimeout(async () => {
+    let stale = false
+    const timer = window.setTimeout(async () => {
       setLoadingData(true)
       setError(null)
       try {
         const raw = await queryTable(picked.url, selections)
-        setCube(parseJsonStat(raw as never))
+        if (!stale) setCube(parseJsonStat(raw))
       } catch (e) {
-        setError(errText(e))
+        if (!stale) setError(errText(e))
       } finally {
-        setLoadingData(false)
+        if (!stale) setLoadingData(false)
       }
     }, 450)
-    return () => window.clearTimeout(debTimer.current)
+    return () => {
+      stale = true
+      window.clearTimeout(timer)
+      setLoadingData(false)
+    }
   }, [picked, selections, cells])
 
   // Switching to the map needs every municipality; expand the geo dimension.
@@ -119,7 +133,9 @@ export default function App() {
     if (next !== 'map' || !picked) return
     const geoVar = picked.meta.variables.find(isRegion)
     if (!geoVar) return
-    const municipalities = geoVar.values.filter((v) => /^KU/.test(v.code)).map((v) => v.code)
+    const municipalities = geoVar.values
+      .filter((v) => municipalityCode(v.code) != null)
+      .map((v) => v.code)
     if (municipalities.length && selections[geoVar.code]?.length !== municipalities.length) {
       setSelections((s) => ({ ...s, [geoVar.code]: municipalities }))
     }
@@ -149,12 +165,12 @@ export default function App() {
           </p>
           {loadingMeta && <div className="loading-row"><Loader2 className="spin" /> Loading table…</div>}
           {error && <div className="error-row">{error}</div>}
-          <TableBrowser lang={lang} onSelect={onSelectTable} />
+          <TableBrowser lang={LANG} onSelect={onSelectTable} />
         </main>
       ) : (
         <main className="explorer">
           <div className="explorer-head">
-            <button className="back" onClick={() => { setPicked(null); setCube(null) }}>
+            <button className="back" onClick={() => { setPicked(null); setCube(null); setError(null) }}>
               <ArrowLeft size={15} /> Tables
             </button>
             <h2>{picked.title}</h2>
@@ -192,16 +208,16 @@ export default function App() {
                 {loadingData && <Loader2 size={15} className="spin viz-spin" />}
               </div>
 
-              {error && <div className="error-row">{error}</div>}
+              {(tooLarge ?? error) && <div className="error-row">{tooLarge ?? error}</div>}
 
-              {!cube && !error && (
+              {!cube && !tooLarge && !error && (
                 <div className="viz-empty">
                   {loadingData ? 'Querying Statistics Finland…' : 'Adjust the dimensions to load data.'}
                 </div>
               )}
 
               {cube && view === 'chart' && <ChartView cube={cube} />}
-              {cube && view === 'map' && hasGeo && <MapView cube={cube} theme={theme} />}
+              {cube && view === 'map' && hasGeo && cube.geoDim && <MapView cube={cube} theme={theme} />}
 
               {cube && (
                 <div className="source-line">

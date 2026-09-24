@@ -70,7 +70,9 @@ Used only to draw the choropleth outlines.
 - **Request**: `GetFeature`, `outputFormat=application/json`,
   `srsName=EPSG:4326` (WGS84, what MapLibre wants).
 - **Join key**: each feature has `kunta` = 3-digit code (`"020"`); StatFin uses
-  `KU020`. `lib/wfs.ts` reduces both to bare digits.
+  `KU020`. `lib/wfs.ts` reduces both to bare digits. Other areas in the same
+  dimension (`SSS`, `MK05`, `SK091`, …) are skipped, not joined: their digits
+  would otherwise land on municipalities 005 and 091.
 
 Statistics Finland also publishes WMS and an OGC API – Features endpoint for the
 same data; WFS-as-GeoJSON is the simplest fit for a web map and is what we use.

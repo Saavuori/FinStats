@@ -28,13 +28,29 @@ function parseMarkdown(md) {
   const lines = escaped.split('\n');
   const result = [];
   let inList = false;
+  // The list item or paragraph being collected. Markdown wraps both over
+  // several source lines; they are joined before inline formatting, so a
+  // **bold** or `code` span may cross a line break.
+  let block = null;
+
+  const flush = () => {
+    if (!block) return;
+    const content = parseInline(block.text);
+    result.push(block.type === 'li' ? `  <li>${content}</li>` : `<p>${content}</p>`);
+    block = null;
+  };
+  const closeList = () => {
+    flush();
+    if (inList) { result.push('</ul>'); inList = false; }
+  };
 
   for (let i = 0; i < lines.length; i++) {
-    const line = lines[i].trim();
+    const raw = lines[i];
+    const line = raw.trim();
 
     // Horizontal Rule
     if (line === '---') {
-      if (inList) { result.push('</ul>'); inList = false; }
+      closeList();
       result.push('<hr />');
       continue;
     }
@@ -45,7 +61,7 @@ function parseMarkdown(md) {
       continue;
     }
     if (line.startsWith('## ')) {
-      if (inList) { result.push('</ul>'); inList = false; }
+      closeList();
       const headingText = line.substring(3);
       // Match versions like [v1.0.0] - 2026-06-16 to wrap version in a styled tag
       const versionMatch = headingText.match(/\[(.*?)\]\s*-\s*(.*)/);
@@ -57,7 +73,7 @@ function parseMarkdown(md) {
       continue;
     }
     if (line.startsWith('### ')) {
-      if (inList) { result.push('</ul>'); inList = false; }
+      closeList();
       const subHeadingText = line.substring(4);
       // Give semantic category styling (Added / Fixed / Changed / etc.)
       const catClass = subHeadingText.toLowerCase();
@@ -67,35 +83,32 @@ function parseMarkdown(md) {
 
     // List Items
     if (line.startsWith('- ') || line.startsWith('* ')) {
+      flush();
       if (!inList) {
         result.push('<ul>');
         inList = true;
       }
-      const content = parseInline(line.substring(2));
-      result.push(`  <li>${content}</li>`);
+      block = { type: 'li', text: line.substring(2) };
       continue;
     }
 
-    // Blank line closes lists
+    // Blank line closes lists and paragraphs
     if (line === '') {
-      if (inList) {
-        result.push('</ul>');
-        inList = false;
-      }
+      closeList();
       continue;
     }
 
-    // Paragraph text fallback
-    if (inList) {
-      result.push('</ul>');
-      inList = false;
+    // An indented line continues the list item above it; an unindented one
+    // continues a paragraph, or ends the list and starts a paragraph.
+    if (block && (block.type === 'p' || /^\s/.test(raw))) {
+      block.text += ' ' + line;
+      continue;
     }
-    result.push(`<p>${parseInline(line)}</p>`);
+    closeList();
+    block = { type: 'p', text: line };
   }
 
-  if (inList) {
-    result.push('</ul>');
-  }
+  closeList();
 
   return result.join('\n');
 }
@@ -112,9 +125,11 @@ function parseInline(text) {
 
 const parsedContent = parseMarkdown(markdown);
 const buildDate = new Date().toISOString().split('T')[0];
+// Replacer functions, so a `$&` or `$'` in the changelog is inserted verbatim
+// instead of being expanded as a replacement pattern.
 const finalHtml = template
-  .replace('{{CONTENT}}', parsedContent)
-  .replace('{{BUILD_DATE}}', buildDate);
+  .replace('{{CONTENT}}', () => parsedContent)
+  .replace('{{BUILD_DATE}}', () => buildDate);
 
 if (!fs.existsSync(outDir)) {
   fs.mkdirSync(outDir, { recursive: true });

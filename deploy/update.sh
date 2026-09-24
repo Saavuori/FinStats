@@ -18,23 +18,29 @@ else
   ENGINE=docker; COMPOSE="docker-compose"
 fi
 
-echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] Checking for updates..." >> $LOG
+# Cron appends to the log every 5 minutes for as long as the host runs; keep
+# only the newest lines so it cannot fill the disk.
+if [ -f "$LOG" ] && [ "$(wc -l < "$LOG")" -gt 5000 ]; then
+  tail -n 2000 "$LOG" > "$LOG.tmp" && mv "$LOG.tmp" "$LOG"
+fi
 
-$ENGINE pull $IMAGE >> $LOG 2>&1
+echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] Checking for updates..." >> "$LOG"
+
+$ENGINE pull $IMAGE >> "$LOG" 2>&1
 
 NEW_ID=$($ENGINE inspect $IMAGE --format '{{.Id}}')
 RUNNING_ID=$($ENGINE inspect finstats --format '{{.Image}}' 2>/dev/null || echo '')
 
 if [ "$RUNNING_ID" = "$NEW_ID" ]; then
-  echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] Already up to date." >> $LOG
+  echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] Already up to date." >> "$LOG"
   exit 0
 fi
 
-echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] New image detected! Redeploying..." >> $LOG
+echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] New image detected! Redeploying..." >> "$LOG"
 
 # Full down/up — the only reliable way with rootless Podman
 cd "$COMPOSE_DIR"
-$COMPOSE down >> $LOG 2>&1 || true
-$COMPOSE up -d >> $LOG 2>&1
+$COMPOSE down >> "$LOG" 2>&1 || true
+$COMPOSE up -d >> "$LOG" 2>&1
 
-echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] Redeploy complete." >> $LOG
+echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] Redeploy complete." >> "$LOG"
