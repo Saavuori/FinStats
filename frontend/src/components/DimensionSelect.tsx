@@ -31,7 +31,20 @@ function DimensionSelect({ variable, selected, onChange }: Props) {
     const next = new Set(selectedSet)
     if (next.has(code)) next.delete(code)
     else next.add(code)
-    // Preserve API order.
+    commit(next)
+  }
+
+  // With a filter typed, the bulk select adds just the matching values
+  // (all of them, not only the 400 listed) to the current pick.
+  const filtering = filter.trim() !== ''
+  function selectMatching() {
+    const next = new Set(selectedSet)
+    for (const v of filtered) next.add(v.code)
+    commit(next)
+  }
+
+  // Preserve API order.
+  function commit(next: Set<string>) {
     onChange(variable.values.filter((v) => next.has(v.code)).map((v) => v.code))
   }
 
@@ -71,8 +84,8 @@ function DimensionSelect({ variable, selected, onChange }: Props) {
           )}
 
           <div className="dim-actions">
-            <button onClick={() => onChange(variable.values.map((v) => v.code))}>
-              Select all
+            <button onClick={selectMatching} disabled={filtering && filtered.length === 0}>
+              {filtering ? `Select ${filtered.length} matching` : 'Select all'}
             </button>
             <button onClick={() => onChange([])}>Clear</button>
             {variable.time && (
