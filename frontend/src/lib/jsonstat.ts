@@ -28,11 +28,21 @@ export interface CubeRecord {
   value: number | null
 }
 
+/** Unit of one measure, from the metric dimension's category metadata. */
+export interface CubeUnit {
+  base: string
+  decimals?: number
+}
+
 export interface Cube {
   label: string
   source: string
   updated: string
-  unit: string
+  /**
+   * Units keyed by metric category code. Measures in one table can differ
+   * ("index point" vs "per cent"), so read them through `unitOf`.
+   */
+  units: Record<string, CubeUnit>
   dims: CubeDim[]
   records: CubeRecord[]
   timeDim?: string
@@ -105,24 +115,35 @@ export function parseJsonStat(raw: RawJsonStat): Cube {
     records.push({ key, value: raw.value[flat] ?? null })
   }
 
-  // Unit label from the metric dimension, if any.
+  // Per-measure units from the metric dimension, if any.
   const metricDim = dims.find((d) => d.role === 'metric')
-  let unit = ''
+  const units: Record<string, CubeUnit> = {}
   if (metricDim) {
-    const rawUnit = raw.dimension[metricDim.id].category.unit
-    const first = rawUnit && Object.values(rawUnit)[0]
-    if (first?.base) unit = first.base
+    const rawUnit = raw.dimension[metricDim.id].category.unit ?? {}
+    for (const [code, u] of Object.entries(rawUnit)) {
+      units[code] = { base: u.base ?? '', decimals: u.decimals }
+    }
   }
 
   return {
     label: raw.label ?? '',
     source: raw.source ?? 'Statistics Finland',
     updated: raw.updated ?? '',
-    unit,
+    units,
     dims,
     records,
     timeDim: dims.find((d) => d.role === 'time')?.id,
     geoDim: dims.find((d) => d.role === 'geo')?.id,
     metricDim: metricDim?.id,
   }
+}
+
+/**
+ * The unit of one measure. With no metric dimension, or a single measure,
+ * `measure` may be omitted and the table's only unit is returned.
+ */
+export function unitOf(cube: Cube, measure?: string): CubeUnit | undefined {
+  if (measure != null) return cube.units[measure]
+  const all = Object.values(cube.units)
+  return all.length === 1 ? all[0] : undefined
 }

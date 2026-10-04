@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import * as maplibregl from 'maplibre-gl'
 import type { FeatureCollection } from 'geojson'
-import type { Cube } from '../lib/jsonstat'
+import { unitOf, type Cube } from '../lib/jsonstat'
 import { fetchMunicipalities, municipalityCode } from '../lib/wfs'
 import { choroplethColor, SERIES_COLORS } from '../lib/palette'
 import { BASEMAP_STYLES, REGION_STROKE, type Theme } from '../lib/theme'
@@ -47,6 +47,16 @@ function MapView({ cube, theme }: Props) {
     ? measurePick
     : (metricDim?.categories[0]?.code ?? '')
 
+  // Unit and precision of the measure on the map — measures in one table can
+  // differ ("index point" vs "per cent"). Without a decimals hint, keep up to
+  // two, so a 0.4–1.2 range isn't rounded to "0"–"1".
+  const unit = unitOf(cube, metricDim ? measure : undefined)
+  const unitText = unit?.base ?? ''
+  const fmt = useMemo(() => {
+    const nf = new Intl.NumberFormat('en-US', { maximumFractionDigits: unit?.decimals ?? 2 })
+    return (v: number) => nf.format(v)
+  }, [unit?.decimals])
+
   // Load municipality polygons once.
   useEffect(() => {
     let cancelled = false
@@ -84,8 +94,8 @@ function MapView({ cube, theme }: Props) {
     return { values: m, min: lo, max: hi }
   }, [cube, geoDim, timeDim, metricDim, period, measure])
 
-  // Build a coloured GeoJSON: attach value, unit and fill colour to each
-  // feature, so the hover popup reads everything from the feature itself.
+  // Build a coloured GeoJSON: attach the formatted value and fill colour to
+  // each feature, so the hover popup reads everything from the feature itself.
   const coloured = useMemo(() => {
     if (!geo) return null
     const span = max - min || 1
@@ -98,14 +108,13 @@ function MapView({ cube, theme }: Props) {
         ...f,
         properties: {
           ...f.properties,
-          _value: value ?? null,
-          _unit: cube.unit,
+          _text: value == null ? '—' : `${fmt(value)} ${unitText}`.trim(),
           _fill: fill,
         },
       }
     })
     return { type: 'FeatureCollection', features } as FeatureCollection
-  }, [geo, values, min, max, cube.unit])
+  }, [geo, values, min, max, fmt, unitText])
 
   // Create the map, with its layers and hover popup, when the theme (basemap)
   // changes.
@@ -160,8 +169,6 @@ function MapView({ cube, theme }: Props) {
     ;(map.getSource(SOURCE) as maplibregl.GeoJSONSource).setData(coloured)
   }, [map, coloured])
 
-  const fmt = (v: number) => new Intl.NumberFormat('en-US').format(Math.round(v))
-
   return (
     <div className="map-wrap">
       <div className="chart-toolbar">
@@ -206,7 +213,7 @@ function MapView({ cube, theme }: Props) {
             }}
           />
           <span>{fmt(max)}</span>
-          <span className="legend-unit">{cube.unit}</span>
+          <span className="legend-unit">{unitText}</span>
         </div>
       )}
       <p className="map-hint" style={{ borderColor: SERIES_COLORS[0] }}>
@@ -223,11 +230,10 @@ function MapView({ cube, theme }: Props) {
  * cannot be interpreted as markup.
  */
 function popupContent(p: Record<string, unknown>): HTMLElement {
-  const val = p._value == null ? '—' : new Intl.NumberFormat('en-US').format(Number(p._value))
   const el = document.createElement('div')
   const name = document.createElement('strong')
   name.textContent = String(p.name ?? p.nimi ?? '')
-  el.append(name, document.createElement('br'), `${val} ${p._unit ?? ''}`)
+  el.append(name, document.createElement('br'), String(p._text ?? '—'))
   return el
 }
 

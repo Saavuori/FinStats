@@ -12,7 +12,7 @@ import {
   ResponsiveContainer,
 } from 'recharts'
 import { LineChart as LineIcon, BarChart3 } from 'lucide-react'
-import type { Cube } from '../lib/jsonstat'
+import { unitOf, type Cube, type CubeCategory } from '../lib/jsonstat'
 import { seriesColor } from '../lib/palette'
 
 interface Props {
@@ -58,12 +58,36 @@ function ChartView({ cube }: Props) {
     return p
   }, [cube, xDim, seriesDim])
 
-  const seriesCats = seriesDim ? seriesDim.categories : [{ code: '_v', label: cube.unit || 'Value' }]
+  // Units of the measures on screen: the pinned one, or every measure when
+  // the measure dimension is the x-axis or the series. One shared unit goes
+  // above the chart; mixed units ("index point" and "per cent") are named on
+  // each series or x category instead, so none is mislabelled.
+  const { sharedUnit, labelOf } = useMemo(() => {
+    const metric = cube.dims.find((d) => d.id === cube.metricDim)
+    const shown = !metric
+      ? []
+      : metric.id in pinned
+        ? [pinned[metric.id]]
+        : metric.categories.map((c) => c.code)
+    const bases = new Set(shown.map((m) => unitOf(cube, m)?.base).filter(Boolean))
+    const mixed = bases.size > 1
+    return {
+      sharedUnit: bases.size === 1 ? [...bases][0]! : '',
+      labelOf: (dimId: string, cat: CubeCategory) => {
+        const base = mixed && dimId === metric?.id ? unitOf(cube, cat.code)?.base : ''
+        return base ? `${cat.label} (${base})` : cat.label
+      },
+    }
+  }, [cube, pinned])
+
+  const seriesCats = seriesDim
+    ? seriesDim.categories.map((c) => ({ code: c.code, label: labelOf(seriesDim.id, c) }))
+    : [{ code: '_v', label: sharedUnit || 'Value' }]
 
   // Recharts rows: one per x category, a column per series.
   const data = useMemo(() => {
     const index = new Map<string, Record<string, string | number | null>>()
-    for (const cat of xDim.categories) index.set(cat.code, { x: cat.label })
+    for (const cat of xDim.categories) index.set(cat.code, { x: labelOf(xDim.id, cat) })
     for (const rec of cube.records) {
       // Skip records that don't match the pinned selection.
       const matchPinned = Object.entries(pinned).every(([k, v]) => rec.key[k] === v)
@@ -74,7 +98,7 @@ function ChartView({ cube }: Props) {
       row[sCode] = rec.value
     }
     return [...index.values()]
-  }, [cube, xDim, seriesDim, pinned])
+  }, [cube, xDim, seriesDim, pinned, labelOf])
 
   const numberFmt = (v: number) => new Intl.NumberFormat('en-US').format(v)
 
@@ -103,7 +127,7 @@ function ChartView({ cube }: Props) {
         </div>
       </div>
 
-      {cube.unit && <div className="chart-unit">Unit: {cube.unit}</div>}
+      {sharedUnit && <div className="chart-unit">Unit: {sharedUnit}</div>}
 
       <ResponsiveContainer width="100%" height={420}>
         {kind === 'line' ? (
