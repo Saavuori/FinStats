@@ -3,6 +3,20 @@
 All notable changes to this project are documented here. The version headings
 match the tags CI generates on each push to `main`.
 
+## [v0.0.23] - 2026-10-04
+
+### Fixed
+- **Units**: Tables whose measures have different units ("index point" and
+  "per cent") no longer label every measure with the first one. The chart
+  names each series' unit when they differ, and the map legend and popup
+  show the unit of the measure on the map.
+- **Map legend**: Values keep their decimals instead of being rounded to
+  whole numbers, so a 0.4–1.2 % range no longer reads "0"–"1". The legend
+  and the hover popup now format values the same way.
+- **Select all**: With a filter typed in a dimension, the button selects the
+  matching values only ("Select 6 matching") and adds them to the current
+  pick, instead of selecting every value of the dimension.
+
 ## [v0.0.22] - 2026-09-23
 
 ### Fixed
