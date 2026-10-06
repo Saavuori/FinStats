@@ -73,3 +73,20 @@ jobs:
       # dependency bump changing types out from under us.
       - name: Build
         run: npm run build
+
+      # A missing MapLibre worker still builds cleanly — production then serves
+      # index.html in its place and every map is blank (v0.0.22). Fail here
+      # instead, so a maplibre-gl or Vite bump cannot auto-merge that.
+      - name: Check the MapLibre worker is emitted and referenced
+        run: |
+          worker=$(ls dist/assets/maplibre-gl-worker-*.js 2>/dev/null | head -n 1)
+          if [ -z "$worker" ]; then
+            echo "::error::dist/assets has no maplibre-gl-worker-*.js — maps would render blank"
+            exit 1
+          fi
+          name=$(basename "$worker")
+          if ! grep -qF "$name" --exclude="$name" dist/assets/*.js; then
+            echo "::error::$name is emitted but no bundle references it — setWorkerUrl is not wired up"
+            exit 1
+          fi
+          echo "MapLibre worker OK: $name"
