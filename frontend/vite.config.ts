@@ -7,6 +7,9 @@ import react from '@vitejs/plugin-react'
 // /api/version and /api/health, hence the small proxy for local dev.
 export default defineConfig({
   plugins: [react()],
+  // MapLibre's worker is an ES module (it imports a shared chunk), so bundle
+  // it as one too; see MapView.tsx.
+  worker: { format: 'es' },
   server: {
     port: process.env.PORT ? Number(process.env.PORT) : 5173,
     proxy: {
