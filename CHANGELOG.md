@@ -3,6 +3,14 @@
 All notable changes to this project are documented here. The version headings
 match the tags CI generates on each push to `main`.
 
+## [v0.0.23] - 2026-10-06
+
+### Fixed
+- **Blank maps**: The map view draws again. MapLibre 6 loads its background
+  worker from a file next to the app's script that the build never produced,
+  so the server answered with the page itself and no map ever appeared. The
+  worker is now bundled into the build.
+
 ## [v0.0.22] - 2026-09-23
 
 ### Fixed

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import * as maplibregl from 'maplibre-gl'
+import maplibreWorkerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url'
 import type { FeatureCollection } from 'geojson'
 import type { Cube } from '../lib/jsonstat'
 import { fetchMunicipalities, municipalityCode } from '../lib/wfs'
@@ -10,6 +11,12 @@ interface Props {
   cube: Cube
   theme: Theme
 }
+
+// MapLibre 6 looks for its worker at `./maplibre-gl-worker.mjs` next to the
+// bundle, which Vite never emits — in production that path fell through to
+// index.html and every map stayed blank. Let Vite bundle the worker (with the
+// shared chunk it imports) and point MapLibre at the emitted file.
+maplibregl.setWorkerUrl(maplibreWorkerUrl)
 
 const FINLAND: [number, number] = [25.7, 64.9]
 const SOURCE = 'regions'
