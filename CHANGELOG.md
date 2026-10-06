@@ -3,13 +3,12 @@
 All notable changes to this project are documented here. The version headings
 match the tags CI generates on each push to `main`.
 
-## [v0.0.24] - 2026-10-06
+## [v0.0.25] - 2026-10-06
 
 ### Fixed
-- **Blank maps can't come back quietly**: CI now fails a build that lacks
-  MapLibre's worker, and the server answers a missing file with a 404 rather
-  than the app's page — the reason the v0.0.23 problem surfaced only as an
-  empty map.
+- **Missing files are 404s**: the server answers a missing file with a 404
+  rather than the app's page — the reason the v0.0.23 problem surfaced only as
+  an empty map.
 - **Honest charts**: picking several values in more than one dimension no
   longer silently drops all but the first; every combination is a series.
   Measures in different units (a count and a percentage) no longer share one
