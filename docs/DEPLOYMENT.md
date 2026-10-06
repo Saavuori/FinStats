@@ -30,7 +30,7 @@ to this container over the shared external `web-proxy` podman network.
 
 ```
                        :443  ┌───────────────────────┐
-finstat.saavuori.live ──────▶│ ratikka_ratikka-caddy │──▶ finstats:8080
+finstat.saavuori.live     ──▶│ ratikka_ratikka-caddy │──▶ finstats:8080
                              └───────────────────────┘     (web-proxy network)
 ```
 

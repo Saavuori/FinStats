@@ -105,7 +105,7 @@ curl -fsSL https://raw.githubusercontent.com/Saavuori/FinStats/main/deploy/insta
 Before running it:
 
 - **Point DNS at the host** — an A/AAAA record for your domain (a free
-  `*.duckdns.org` name works fine; the reference deployment is
+  `*.duckdns.org` name works fine; the reference deployment uses
   `finstat.saavuori.live`). Caddy issues the certificate on the first
   request once it resolves.
 - **Open ports 80 and 443** to the host, and have Podman (rootless is fine) or

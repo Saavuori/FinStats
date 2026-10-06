@@ -3,13 +3,13 @@
 All notable changes to this project are documented here. The version headings
 match the tags CI generates on each push to `main`.
 
-## [v0.0.23] - 2026-10-06
+## [v0.0.24] - 2026-10-06
 
 ### Fixed
-- **The map works again**: since the MapLibre 6 upgrade in August, the map
-  view showed an empty frame for every visitor — the library's worker was
-  never included in the build. It is now bundled, and CI fails a build that
-  lacks it.
+- **Blank maps can't come back quietly**: CI now fails a build that lacks
+  MapLibre's worker, and the server answers a missing file with a 404 rather
+  than the app's page — the reason the v0.0.23 problem surfaced only as an
+  empty map.
 - **Honest charts**: picking several values in more than one dimension no
   longer silently drops all but the first; every combination is a series.
   Measures in different units (a count and a percentage) no longer share one
@@ -27,7 +27,6 @@ match the tags CI generates on each push to `main`.
 - **Colour-blind safety**: the chart palette is the validated one the sibling
   apps use; the old one made series 2 and 3 indistinguishable under
   protanopia.
-- **Server**: a missing asset is a 404 instead of the app's HTML.
 - **Docs**: the live address is `finstat.saavuori.live`; the changelog's link
   back to the app pointed at a domain that no longer resolves.
 
@@ -49,6 +48,14 @@ match the tags CI generates on each push to `main`.
   with its update date; going back to the list keeps your search.
 - The map library loads only when a map is first opened: the initial download
   is about 60 % smaller.
+
+## [v0.0.23] - 2026-10-06
+
+### Fixed
+- **Blank maps**: The map view draws again. MapLibre 6 loads its background
+  worker from a file next to the app's script that the build never produced,
+  so the server answered with the page itself and no map ever appeared. The
+  worker is now bundled into the build.
 
 ## [v0.0.22] - 2026-09-23
 
