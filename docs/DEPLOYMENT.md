@@ -30,27 +30,27 @@ to this container over the shared external `web-proxy` podman network.
 
 ```
                        :443  ┌───────────────────────┐
-tilastokeskus.duckdns.org ──▶│ ratikka_ratikka-caddy │──▶ finstats:8080
+finstat.saavuori.live ──────▶│ ratikka_ratikka-caddy │──▶ finstats:8080
                              └───────────────────────┘     (web-proxy network)
 ```
 
-The live deployment uses `tilastokeskus.duckdns.org`; the domain is a parameter
+The live deployment uses `finstat.saavuori.live`; the domain is a parameter
 everywhere, so nothing in the repo hardcodes it.
 
 ### First-time setup
 
 DNS first: the domain must have an A/AAAA record pointing at the host (for the
-Oracle box, `130.61.233.86`). Caddy provisions the certificate automatically on
+Oracle box, `130.61.41.177`). Caddy provisions the certificate automatically on
 the first request once that resolves.
 
 Then run the installer on the host — it takes the domain as its only required
 argument:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Saavuori/FinStats/main/deploy/install.sh | bash -s -- tilastokeskus.duckdns.org
+curl -fsSL https://raw.githubusercontent.com/Saavuori/FinStats/main/deploy/install.sh | bash -s -- finstat.saavuori.live
 ```
 
-Or, from a checkout: `deploy/install.sh tilastokeskus.duckdns.org [install-dir]`
+Or, from a checkout: `deploy/install.sh finstat.saavuori.live [install-dir]`
 (the install dir defaults to `~/finstats`).
 
 `deploy/install.sh` is idempotent — re-running it pulls the latest image and
@@ -66,7 +66,7 @@ redeploys without duplicating the vhost, network or cron entry. It:
    attaches the Caddy container to `web-proxy`, and reloads Caddy:
 
    ```
-   tilastokeskus.duckdns.org {
+   finstat.saavuori.live {
        reverse_proxy finstats:8080
        encode gzip zstd
    }
@@ -100,8 +100,8 @@ build.
 ## Verifying a deploy
 
 ```bash
-curl -s https://tilastokeskus.duckdns.org/api/version   # {"version":"vX.Y.Z",...}
-curl -s https://tilastokeskus.duckdns.org/api/health    # {"status":"ok"}
+curl -s https://finstat.saavuori.live/api/version   # {"version":"vX.Y.Z",...}
+curl -s https://finstat.saavuori.live/api/health    # {"status":"ok"}
 podman logs --tail 50 finstats
 tail -20 ~/finstats/update.log
 ```

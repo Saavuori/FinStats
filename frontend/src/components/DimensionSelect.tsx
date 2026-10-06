@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useId, useMemo, useState } from 'react'
 import { ChevronDown, Search } from 'lucide-react'
 import type { Variable } from '../types'
 
@@ -10,12 +10,14 @@ interface Props {
 
 /**
  * A searchable multi-select for one table variable. Variables range from 2
- * values (sex) to ~600 (municipalities), so it has a filter box and bulk
- * actions. Collapsed, it summarises the current pick; open, it lists values.
+ * values (sex) to ~600 (areas), so it has a filter box and bulk actions, and
+ * every value has an "only" shortcut for the common "just this one" pick.
+ * Collapsed, it summarises the current pick; open, it lists values.
  */
 function DimensionSelect({ variable, selected, onChange }: Props) {
   const [open, setOpen] = useState(false)
   const [filter, setFilter] = useState('')
+  const bodyId = useId()
 
   const filtered = useMemo(() => {
     const q = filter.trim().toLowerCase()
@@ -40,24 +42,31 @@ function DimensionSelect({ variable, selected, onChange }: Props) {
       ? 'none'
       : selected.length === 1
         ? (variable.values.find((v) => v.code === selected[0])?.label ?? selected[0])
-        : `${selected.length} selected`
+        : selected.length === variable.values.length
+          ? `all ${selected.length}`
+          : `${selected.length} selected`
 
   return (
     <div className={`dim ${open ? 'dim-open' : ''}`}>
-      <button className="dim-head" onClick={() => setOpen((o) => !o)}>
+      <button
+        className="dim-head"
+        onClick={() => setOpen((o) => !o)}
+        aria-expanded={open}
+        aria-controls={bodyId}
+      >
         <span className="dim-label">
           {variable.label}
           {variable.time && <span className="dim-tag">time</span>}
           {variable.content && <span className="dim-tag">measure</span>}
         </span>
         <span className="dim-summary">
-          {summary}
+          <span className="dim-summary-text">{summary}</span>
           <ChevronDown size={15} />
         </span>
       </button>
 
       {open && (
-        <div className="dim-body">
+        <div className="dim-body" id={bodyId}>
           {variable.values.length > 8 && (
             <div className="dim-search">
               <Search size={14} />
@@ -65,6 +74,7 @@ function DimensionSelect({ variable, selected, onChange }: Props) {
                 autoFocus
                 value={filter}
                 placeholder={`Filter ${variable.values.length} values…`}
+                aria-label={`Filter ${variable.label}`}
                 onChange={(e) => setFilter(e.target.value)}
               />
             </div>
@@ -85,15 +95,21 @@ function DimensionSelect({ variable, selected, onChange }: Props) {
           <ul className="dim-list">
             {filtered.slice(0, 400).map((v) => (
               <li key={v.code}>
-                <label>
+                <label title={v.code}>
                   <input
                     type="checkbox"
                     checked={selectedSet.has(v.code)}
                     onChange={() => toggle(v.code)}
                   />
                   <span>{v.label}</span>
-                  <code>{v.code}</code>
                 </label>
+                <button
+                  className="dim-only"
+                  onClick={() => onChange([v.code])}
+                  aria-label={`Only ${v.label}`}
+                >
+                  only
+                </button>
               </li>
             ))}
             {filtered.length > 400 && (
