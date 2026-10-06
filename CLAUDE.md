@@ -83,6 +83,6 @@ Push to `main` → CI tags, builds a multi-arch image, pushes to
 `ghcr.io/saavuori/finstats:latest`. The Oracle host runs a 5-minute cron
 (`deploy/update.sh`) that pulls and redeploys. TLS is terminated by the Caddy
 container in the *ratikka* stack, which proxies the public domain over the
-shared external `web-proxy` podman network (live: `tilastokeskus.duckdns.org`).
+shared external `web-proxy` podman network (live: `finstat.saavuori.live`).
 `deploy/install.sh <domain>` does the whole host setup and takes the domain as a
 parameter — nothing else hardcodes it. See `docs/DEPLOYMENT.md`.

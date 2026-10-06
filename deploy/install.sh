@@ -4,7 +4,7 @@
 #
 #   ./install.sh <domain> [install-dir]
 #   curl -fsSL https://raw.githubusercontent.com/Saavuori/FinStats/main/deploy/install.sh \
-#     | bash -s -- tilastokeskus.duckdns.org
+#     | bash -s -- finstat.saavuori.live
 #
 # It is idempotent: re-running it updates the deployment instead of duplicating
 # the vhost, the network or the cron entry.
@@ -28,7 +28,7 @@ usage() {
   cat >&2 <<EOF
 Usage: install.sh <domain> [install-dir]
 
-  <domain>       public hostname Caddy should serve, e.g. tilastokeskus.duckdns.org
+  <domain>       public hostname Caddy should serve, e.g. finstat.saavuori.live
                  (must already have an A/AAAA record pointing at this host)
   [install-dir]  where the stack lives (default: \$HOME/finstats)
 
