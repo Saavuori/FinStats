@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { BarChart3, Map as MapIcon, Moon, Sun, Loader2, ArrowLeft, Database } from 'lucide-react'
 import TableBrowser from './components/TableBrowser'
+import Discover from './components/Discover'
 import DimensionSelect from './components/DimensionSelect'
 import ChartView from './components/ChartView'
 import MapView from './components/MapView'
@@ -8,8 +9,9 @@ import VersionBadge from './components/VersionBadge'
 import { getMeta, queryTable, tableUrl, isRegion, type Lang } from './lib/pxweb'
 import { municipalityCode } from './lib/wfs'
 import { parseJsonStat, type Cube } from './lib/jsonstat'
+import type { Featured } from './lib/featured'
 import { loadTheme, saveTheme, type Theme } from './lib/theme'
-import type { TableMeta } from './types'
+import type { TableMeta, Variable } from './types'
 
 const CELL_LIMIT = 120000
 
@@ -50,25 +52,32 @@ export default function App() {
     [picked],
   )
 
-  // Pick a table -> fetch metadata -> seed sensible default selections. Only
-  // the latest pick may land: a slower response for a table clicked earlier
-  // must not replace it.
+  // Pick a table -> fetch metadata -> seed sensible default selections, or the
+  // featured preset's. Only the latest pick may land: a slower response for a
+  // table clicked earlier must not replace it.
   const metaRequest = useRef(0)
   const onSelectTable = useCallback(
-    async (path: string, id: string, title: string) => {
+    async (path: string, id: string, title: string, preset?: Featured) => {
       const request = ++metaRequest.current
       const url = tableUrl(LANG, path, id)
       setLoadingMeta(true)
       setError(null)
       setCube(null)
-      setView('chart')
       try {
         const meta = await getMeta(url)
         if (request !== metaRequest.current) return
+        const geoVar = meta.variables.find(isRegion)
+        const toMap = preset?.view === 'map' && !!geoVar && municipalitiesOf(geoVar).length > 0
         const seed: Record<string, string[]> = {}
         for (const v of meta.variables) {
+          // Preset codes the table no longer has are dropped, not sent.
+          const pick = preset?.pick?.[v.code]?.filter((c) => v.values.some((x) => x.code === c))
           if (v.time) {
-            seed[v.code] = v.values.slice(-20).map((x) => x.code)
+            seed[v.code] = v.values.slice(-(preset?.periods ?? 20)).map((x) => x.code)
+          } else if (toMap && v === geoVar) {
+            seed[v.code] = municipalitiesOf(v)
+          } else if (pick?.length) {
+            seed[v.code] = pick
           } else if (isRegion(v)) {
             const whole = v.values.find((x) => x.code === 'SSS')
             seed[v.code] = [whole?.code ?? v.values[0].code]
@@ -77,6 +86,7 @@ export default function App() {
           }
         }
         setSelections(seed)
+        setView(toMap ? 'map' : 'chart')
         setPicked({ url, title, meta })
       } catch (e) {
         if (request === metaRequest.current) setError(errText(e))
@@ -133,9 +143,7 @@ export default function App() {
     if (next !== 'map' || !picked) return
     const geoVar = picked.meta.variables.find(isRegion)
     if (!geoVar) return
-    const municipalities = geoVar.values
-      .filter((v) => municipalityCode(v.code) != null)
-      .map((v) => v.code)
+    const municipalities = municipalitiesOf(geoVar)
     if (municipalities.length && selections[geoVar.code]?.length !== municipalities.length) {
       setSelections((s) => ({ ...s, [geoVar.code]: municipalities }))
     }
@@ -161,11 +169,15 @@ export default function App() {
           <p className="lede">
             Explore thousands of open statistical tables from Tilastokeskus — population,
             economy, housing, environment and more — as interactive charts and maps.
-            Search or browse to begin.
+            Start from a key indicator, see what was just published, or search everything.
           </p>
           {loadingMeta && <div className="loading-row"><Loader2 className="spin" /> Loading table…</div>}
           {error && <div className="error-row">{error}</div>}
-          <TableBrowser lang={LANG} onSelect={onSelectTable} />
+          <TableBrowser
+            lang={LANG}
+            onSelect={onSelectTable}
+            home={<Discover lang={LANG} onSelect={onSelectTable} />}
+          />
         </main>
       ) : (
         <main className="explorer">
@@ -239,6 +251,11 @@ export default function App() {
       </footer>
     </div>
   )
+}
+
+/** The value codes of a region variable that are municipalities. */
+function municipalitiesOf(v: Variable): string[] {
+  return v.values.filter((x) => municipalityCode(x.code) != null).map((x) => x.code)
 }
 
 function errText(e: unknown): string {

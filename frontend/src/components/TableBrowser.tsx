@@ -1,11 +1,15 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { Search, Folder, Table2, ChevronRight, Loader2 } from 'lucide-react'
 import { browse, search, type Lang, type SearchHit } from '../lib/pxweb'
+import { shortDate } from '../lib/dates'
+import { cleanTitle } from '../lib/titles'
 import type { DbNode } from '../types'
 
 interface Props {
   lang: Lang
   onSelect: (path: string, id: string, title: string) => void
+  /** Shown above the subject list at the top level, when not searching. */
+  home?: ReactNode
 }
 
 /**
@@ -13,7 +17,7 @@ interface Props {
  * search. Search wins when there's a query; otherwise we show the current
  * folder with a breadcrumb back up.
  */
-function TableBrowser({ lang, onSelect }: Props) {
+function TableBrowser({ lang, onSelect, home }: Props) {
   const [query, setQuery] = useState('')
   const [debounced, setDebounced] = useState('')
   const [crumbs, setCrumbs] = useState<{ id: string; text: string }[]>([])
@@ -83,7 +87,14 @@ function TableBrowser({ lang, onSelect }: Props) {
         {loading && <Loader2 size={16} className="spin" />}
       </div>
 
-      {!debounced && (
+      {!debounced && crumbs.length === 0 && home && (
+        <>
+          {home}
+          <h3 className="section-title">Browse all subjects</h3>
+        </>
+      )}
+
+      {!debounced && (crumbs.length > 0 || !home) && (
         <div className="crumbs">
           <button onClick={() => setCrumbs([])}>StatFin</button>
           {crumbs.map((c, i) => (
@@ -104,6 +115,7 @@ function TableBrowser({ lang, onSelect }: Props) {
                 <button onClick={() => onSelect(h.path, h.id, cleanTitle(h.title))}>
                   <Table2 size={16} className="ico-table" />
                   <span className="node-text">{cleanTitle(h.title)}</span>
+                  {h.published && <span className="node-date">{shortDate(h.published)}</span>}
                   <span className="node-path">{h.path.replace(/^\//, '')}</span>
                 </button>
               </li>
@@ -117,6 +129,7 @@ function TableBrowser({ lang, onSelect }: Props) {
                     <Table2 size={16} className="ico-table" />
                   )}
                   <span className="node-text">{cleanTitle(n.text)}</span>
+                  {n.updated && <span className="node-date">{shortDate(n.updated)}</span>}
                   {n.type === 'l' && <ChevronRight size={15} className="node-chev" />}
                 </button>
               </li>
@@ -127,11 +140,6 @@ function TableBrowser({ lang, onSelect }: Props) {
       </ul>
     </div>
   )
-}
-
-/** Table titles arrive as "11rb -- Population…"; drop the leading code. */
-function cleanTitle(text: string): string {
-  return text.replace(/^\w+\s*--\s*/, '')
 }
 
 export default TableBrowser

@@ -33,7 +33,8 @@ backend/internal/api/dist/      frontend build, embedded via //go:embed at image
 frontend/src/lib/pxweb.ts       PxWeb API client (browse / search / meta / query)
 frontend/src/lib/jsonstat.ts    JSON-stat v2 -> tidy "cube"
 frontend/src/lib/wfs.ts         municipality GeoJSON + the region-code join
-frontend/src/components/        TableBrowser, DimensionSelect, ChartView, MapView
+frontend/src/lib/featured.ts    hand-picked landing-page indicators + their preset views
+frontend/src/components/        TableBrowser, Discover, DimensionSelect, ChartView, MapView
 scripts/build-changelog.js      CHANGELOG.md -> dist-changelog/index.html for Pages
 deploy/                         install.sh (domain as arg) + compose + cron auto-update
 ```

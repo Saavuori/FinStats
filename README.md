@@ -12,8 +12,12 @@ municipalities — all in the browser.
 
 ## What it does
 
+- **Start from what matters** — the landing page offers hand-picked key
+  indicators (inflation, unemployment, GDP, housing prices, …) and a feed of
+  Statistics Finland's latest releases.
 - **Browse or search** thousands of StatFin tables (population, economy,
-  housing, environment, transport, …) via the PxWeb API.
+  housing, environment, transport, …) via the PxWeb API, with each table's
+  last-updated date.
 - **One generic UI for every table** — controls are generated from each table's
   metadata, so there is no per-table code. Every dimension becomes a searchable
   multi-select.

@@ -3,6 +3,18 @@
 All notable changes to this project are documented here. The version headings
 match the tags CI generates on each push to `main`.
 
+## [v0.0.25] - 2026-10-07
+
+### Added
+- **Key indicators**: The landing page opens with eight headline statistics —
+  ageing by municipality (as a map), inflation, unemployment, GDP growth,
+  housing prices, greenhouse gas emissions, births and life expectancy — each
+  set up on a meaningful view instead of the table's first value.
+- **Latest releases**: A feed of what Statistics Finland published most
+  recently, grouped by statistic and day, with every table one click away.
+- **Update dates**: Table lists and search results show when each table was
+  last updated.
+
 ## [v0.0.23] - 2026-10-06
 
 ### Fixed
