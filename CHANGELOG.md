@@ -3,6 +3,16 @@
 All notable changes to this project are documented here. The version headings
 match the tags CI generates on each push to `main`.
 
+## [v0.0.26] - 2026-10-07
+
+### Added
+- **Latest releases**: The landing page shows what Statistics Finland
+  published most recently, grouped by statistic and day, with every table one
+  click away.
+- **Popular tables, explained**: The starters are now cards with a line on
+  what each shows and when it was last updated, joined by greenhouse gas
+  emissions, births since 1751 and life expectancy.
+
 ## [v0.0.25] - 2026-10-06
 
 ### Fixed

@@ -41,7 +41,8 @@ frontend/src/lib/wfs.ts         map levels, area boundaries (GeoJSON) + the area
 frontend/src/lib/classes.ts     quantile classes for the choropleth
 frontend/src/lib/csv.ts         tidy CSV export
 frontend/src/lib/starters.ts    the landing page's popular tables
-frontend/src/components/        TableBrowser, DimensionSelect, ChartView, TableView, MapView
+frontend/src/lib/dates.ts       PxWeb timestamps -> display dates
+frontend/src/components/        TableBrowser, Discover, DimensionSelect, ChartView, TableView, MapView
 scripts/build-changelog.js      CHANGELOG.md -> dist-changelog/index.html for Pages
 deploy/                         install.sh (domain as arg) + compose + cron auto-update
 ```

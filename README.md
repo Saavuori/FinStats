@@ -13,10 +13,13 @@ choropleth of Finland's municipalities, regions or wellbeing services counties
 
 ## What it does
 
+- **Start from what matters** — the landing page offers popular tables
+  (population, unemployment, income, apartment prices, inflation, GDP,
+  emissions, births, life expectancy) and a feed of Statistics Finland's latest
+  releases.
 - **Browse or search** thousands of StatFin tables (population, economy,
-  housing, environment, transport, …) via the PxWeb API — or start from a
-  handful of popular tables (population, unemployment, income, apartment
-  prices, inflation, GDP).
+  housing, environment, transport, …) via the PxWeb API, each with its update
+  date.
 - **One generic UI for every table** — controls are generated from each table's
   metadata, so there is no per-table code. Every dimension becomes a searchable
   multi-select with an "only" shortcut.

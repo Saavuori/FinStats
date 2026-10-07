@@ -1,12 +1,15 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { Search, Folder, Table2, ChevronRight, Loader2 } from 'lucide-react'
 import { browse, cleanTitle, search, tableRef, type Lang, type SearchHit } from '../lib/pxweb'
+import { shortDate } from '../lib/dates'
 import type { DbNode } from '../types'
 
 interface Props {
   lang: Lang
   /** A table was chosen: its reference ("vaerak/11ra.px") and display title. */
   onSelect: (ref: string, title: string) => void
+  /** Shown above the subject list at the top level, when not searching. */
+  home?: ReactNode
 }
 
 /**
@@ -15,7 +18,7 @@ interface Props {
  * folder with a breadcrumb back up. App keeps this mounted while a table is
  * open, so "back to tables" returns to the same search or folder.
  */
-function TableBrowser({ lang, onSelect }: Props) {
+function TableBrowser({ lang, onSelect, home }: Props) {
   const [query, setQuery] = useState('')
   const [debounced, setDebounced] = useState('')
   const [crumbs, setCrumbs] = useState<{ id: string; text: string }[]>([])
@@ -86,7 +89,14 @@ function TableBrowser({ lang, onSelect }: Props) {
         {loading && <Loader2 size={16} className="spin" />}
       </div>
 
-      {!debounced && (
+      {!debounced && crumbs.length === 0 && home && (
+        <>
+          {home}
+          <h3 className="section-title">Browse all subjects</h3>
+        </>
+      )}
+
+      {!debounced && (crumbs.length > 0 || !home) && (
         <div className="crumbs">
           <button onClick={() => setCrumbs([])}>StatFin</button>
           {crumbs.map((c, i) => (
@@ -107,7 +117,7 @@ function TableBrowser({ lang, onSelect }: Props) {
                 <button onClick={() => onSelect(tableRef(h.path, h.id), cleanTitle(h.title))}>
                   <Table2 size={16} className="ico-table" />
                   <span className="node-text">{cleanTitle(h.title)}</span>
-                  {h.published && <span className="node-date">{shortDate(h.published)}</span>}
+                  {h.published && <span className="node-date">updated {shortDate(h.published)}</span>}
                 </button>
               </li>
             ))
@@ -120,7 +130,7 @@ function TableBrowser({ lang, onSelect }: Props) {
                     <Table2 size={16} className="ico-table" />
                   )}
                   <span className="node-text">{cleanTitle(n.text)}</span>
-                  {n.type === 't' && n.updated && <span className="node-date">{shortDate(n.updated)}</span>}
+                  {n.type === 't' && n.updated && <span className="node-date">updated {shortDate(n.updated)}</span>}
                   {n.type === 'l' && <ChevronRight size={15} className="node-chev" />}
                 </button>
               </li>
@@ -131,12 +141,6 @@ function TableBrowser({ lang, onSelect }: Props) {
       </ul>
     </div>
   )
-}
-
-/** "2026-05-29T08:00:00" -> "29.5.2026", the date format used across the app. */
-function shortDate(iso: string): string {
-  const d = new Date(iso)
-  return Number.isNaN(d.getTime()) ? '' : `updated ${d.toLocaleDateString('fi-FI')}`
 }
 
 export default TableBrowser

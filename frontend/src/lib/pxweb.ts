@@ -38,8 +38,18 @@ async function getJSON<T>(url: string): Promise<T> {
  */
 export function browse(lang: Lang, path: string): Promise<DbNode[]> {
   const url = path ? `${base(lang)}/${path}/` : `${base(lang)}/`
-  return getJSON<DbNode[]>(url)
+  // The tree barely changes within a session, and both the browser and the
+  // landing page's release feed need the top level — cache to save calls.
+  let hit = browseCache.get(url)
+  if (!hit) {
+    hit = getJSON<DbNode[]>(url)
+    browseCache.set(url, hit)
+    hit.catch(() => browseCache.delete(url))
+  }
+  return hit
 }
+
+const browseCache = new Map<string, Promise<DbNode[]>>()
 
 /** Free-text search result row from the `?query=` endpoint. */
 export interface SearchHit {
@@ -61,6 +71,32 @@ export async function search(lang: Lang, query: string): Promise<SearchHit[]> {
   const hits = await getJSON<SearchHit[]>(url)
   return dedupeHits(hits).slice(0, 60)
 }
+
+/**
+ * Tables with their publish dates, for the "latest releases" feed. PxWeb v1
+ * has no "recently updated" listing, and walking the tree costs one call per
+ * subject (~135, far over the 40-call budget). But nearly every table title
+ * ends in the period it covers ("…, 1990-2025", "…, 2009M01-2026M08"), and the
+ * search ORs its terms — so one query for the last three years plus the
+ * period words returns almost the whole live database (~1 400 of ~1 500
+ * tables, ~270 kB) with `published` dates. Tables that stopped updating years
+ * ago are the ones it misses, which a "latest" feed doesn't want anyway.
+ */
+export function recentTables(lang: Lang): Promise<SearchHit[]> {
+  // Cached for the session, like the tree: going back to the landing page
+  // shouldn't spend another call on a 270 kB list.
+  let hit = recentCache.get(lang)
+  if (!hit) {
+    const y = new Date().getFullYear()
+    const terms = [y - 2, y - 1, y, 'month', 'monthly', 'quarter', 'quarterly', 'annual', 'week']
+    hit = getJSON<SearchHit[]>(`${base(lang)}/?query=${encodeURIComponent(terms.join(' '))}`)
+    recentCache.set(lang, hit)
+    hit.catch(() => recentCache.delete(lang))
+  }
+  return hit
+}
+
+const recentCache = new Map<Lang, Promise<SearchHit[]>>()
 
 /**
  * The same table is often published under several statistics (births, deaths

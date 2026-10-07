@@ -90,15 +90,6 @@ a { color: var(--accent); }
   margin: 8px 0 16px;
 }
 
-.starters { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 18px; }
-.starters a {
-  display: inline-flex; align-items: center; gap: 7px;
-  background: var(--surface); border: 1px solid var(--border); border-radius: 999px;
-  padding: 7px 13px; font-size: 0.85rem; color: var(--text-primary); text-decoration: none;
-}
-.starters a svg { color: var(--accent); flex: none; }
-.starters a:hover { border-color: var(--accent); }
-
 /* ---- Browser ---- */
 .browser { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 14px; }
 .browser-search, .dim-search {
@@ -130,6 +121,56 @@ a { color: var(--accent); }
 .node-date { color: var(--muted); font-size: 0.75rem; white-space: nowrap; }
 .node-chev { color: var(--muted); }
 .node-empty, .node-list .dim-more { padding: 16px 10px; color: var(--muted); font-size: 0.9rem; }
+
+/* ---- Discover (landing: key indicators + latest releases) ---- */
+.section-title {
+  font-size: 0.72rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.09em;
+  color: var(--muted); margin: 18px 4px 10px;
+}
+.discover section:first-child .section-title { margin-top: 14px; }
+
+.featured {
+  list-style: none; margin: 0; padding: 0;
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px;
+}
+.featured a {
+  width: 100%; height: 100%; display: flex; flex-direction: column; gap: 6px;
+  background: var(--surface-2); border: 1px solid var(--border); border-radius: 10px;
+  padding: 12px 14px; text-align: left; color: var(--text-primary); text-decoration: none;
+}
+.featured a:hover { border-color: var(--accent); }
+.featured-head { display: flex; align-items: center; gap: 8px; font-weight: 600; font-size: 0.95rem; }
+.featured-head svg { color: var(--accent); flex: none; }
+.featured-blurb { color: var(--text-secondary); font-size: 0.84rem; line-height: 1.4; flex: 1; }
+.featured-date { color: var(--muted); font-size: 0.75rem; }
+
+.releases {
+  list-style: none; margin: 0; padding: 0;
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 10px;
+}
+.releases > li { border: 1px solid var(--border); border-radius: 10px; padding: 10px 6px 6px; }
+.release-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; padding: 0 8px 4px; }
+.release-subject { font-weight: 600; font-size: 0.92rem; }
+.release-date { color: var(--muted); font-size: 0.78rem; white-space: nowrap; }
+.node-list.release-tables { margin: 0; max-height: none; overflow: visible; }
+.node-list.release-tables > li > button { padding: 7px 8px; font-size: 0.86rem; color: var(--text-secondary); }
+.node-list.release-tables > li > button:hover { color: var(--text-primary); }
+.release-more {
+  display: inline-flex; align-items: center; gap: 4px;
+  background: none; border: none; color: var(--accent); cursor: pointer;
+  font-size: 0.8rem; padding: 4px 8px;
+}
+.release-more .flip { transform: rotate(180deg); }
+@media (max-width: 860px) { .featured { grid-template-columns: 1fr 1fr; } }
+@media (max-width: 520px) {
+  /* Phones: compact two-up indicator tiles so the release feed stays near. */
+  .featured { grid-template-columns: 1fr 1fr; gap: 8px; }
+  .featured a { padding: 10px 11px; }
+  .featured-head { font-size: 0.86rem; align-items: flex-start; }
+  .featured-head svg { margin-top: 2px; }
+  .featured-blurb { display: none; }
+  .releases { grid-template-columns: 1fr; }
+}
 
 /* ---- Explorer layout ---- */
 .explorer-head { display: flex; align-items: center; gap: 14px; margin: 6px 0 16px; }

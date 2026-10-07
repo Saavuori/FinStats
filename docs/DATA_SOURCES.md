@@ -17,7 +17,17 @@ The primary source. All numeric data comes from here.
     `Postinumeroalueittainen_avoin_tieto` (PAAVO, postal-area data).
 - **Browse the tree**: `GET .../StatFin/` → subject folders → `GET .../StatFin/vaerak/`
   → table list. Tables have `type: "t"` and ids ending in `.px`.
-- **Full-text search**: `GET .../StatFin/?query=population&filter=*`.
+- **Full-text search**: `GET .../StatFin/?query=population` (adding
+  `filter=*` makes the text search return nothing). Hits carry `path`,
+  `title`, `score` and a `published` timestamp. Space-separated terms are ORed.
+- **Recently updated tables**: there is no endpoint for this, and walking the
+  tree costs one call per subject (~135, over the rate limit). finstats instead
+  searches for the last three years plus period words
+  (`2024 2025 2026 month monthly quarter quarterly annual week`). Table titles
+  end in the period they cover, so this one call returns ~1 400 of ~1 500
+  tables (~270 kB) with `published` dates. Checked against a full tree crawl,
+  it found every table updated in the previous two weeks.
+  Timestamps have no zone; they are Finnish local time.
 - **Table metadata**: `GET .../StatFin/vaerak/11rb.px` → `{ title, variables[] }`.
   Each variable has `code`, `text`, `values[]`, `valueTexts[]`, and — on the
   time variable — `time: true`.

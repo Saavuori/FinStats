@@ -13,6 +13,7 @@ import {
   Table2,
 } from 'lucide-react'
 import TableBrowser from './components/TableBrowser'
+import Discover from './components/Discover'
 import DimensionSelect from './components/DimensionSelect'
 import ChartView from './components/ChartView'
 import TableView from './components/TableView'
@@ -22,7 +23,6 @@ import { cleanTitle, getMeta, isRegion, queryTable, tableUrl, type Lang } from '
 import { mapLevels, pickLevel } from './lib/wfs'
 import { parseJsonStat, type Cube } from './lib/jsonstat'
 import { cubeToCsv, download } from './lib/csv'
-import { STARTERS } from './lib/starters'
 import {
   readUrl,
   resolveSelections,
@@ -159,6 +159,11 @@ export default function App() {
     navigate(search)
   }
 
+  /** Open a table on its default view. */
+  function openTable(ref: string, title: string) {
+    navigate(writeUrl({ table: ref, view: 'chart', sel: {} }), title)
+  }
+
   // Mirror picks and view into the URL. Replace, don't push: each checkbox
   // would otherwise become a Back-button step.
   useEffect(() => {
@@ -287,20 +292,8 @@ export default function App() {
         <p className="lede">
           Explore thousands of open statistical tables from Tilastokeskus — population, economy,
           housing, environment and more — as interactive charts, maps and tables you can share and
-          download. Start from a popular table, or search and browse below.
+          download. Start from a popular table, see what was just published, or search everything.
         </p>
-
-        <nav className="starters" aria-label="Popular tables">
-          {STARTERS.map((s) => {
-            const href = writeUrl(s.state)
-            return (
-              <a key={s.title} href={href} onClick={(e) => followLink(e, href)}>
-                {s.state.view === 'map' ? <MapIcon size={15} /> : <BarChart3 size={15} />}
-                {s.title}
-              </a>
-            )
-          })}
-        </nav>
 
         {loadingMeta && (
           <div className="loading-row">
@@ -310,7 +303,8 @@ export default function App() {
         {error && !picked && <div className="error-row">{error}</div>}
         <TableBrowser
           lang={LANG}
-          onSelect={(ref, name) => navigate(writeUrl({ table: ref, view: 'chart', sel: {} }), name)}
+          onSelect={openTable}
+          home={<Discover lang={LANG} onLink={followLink} onSelect={openTable} />}
         />
       </main>
 
