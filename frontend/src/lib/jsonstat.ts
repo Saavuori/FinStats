@@ -6,7 +6,7 @@
 // position) and labels. We unfold that into tidy records the chart and map can
 // slice independently. Spec: https://json-stat.org/full/
 
-import { looksLikeRegion } from './pxweb'
+import { looksLikeRegion, looksLikeTime } from './pxweb'
 
 export interface CubeCategory {
   code: string
@@ -28,16 +28,53 @@ export interface CubeRecord {
   value: number | null
 }
 
+/** A measure's unit: its label ("number", "%", "EUR/m2") and decimal places. */
+export interface Unit {
+  label: string
+  decimals?: number
+}
+
 export interface Cube {
   label: string
+  /** The table's listing title, "11ra -- Key figures on population by region, 1990-2025". */
+  description: string
   source: string
   updated: string
-  unit: string
+  /** Unit of each measure, keyed by its category code in the metric dimension. */
+  units: Record<string, Unit>
   dims: CubeDim[]
   records: CubeRecord[]
   timeDim?: string
   geoDim?: string
   metricDim?: string
+}
+
+const NO_UNIT: Unit = { label: '' }
+
+/**
+ * The unit of an observation whose measure is `metricCode`. Tables without a
+ * metric dimension have no unit at all.
+ */
+export function unitOf(cube: Cube, metricCode: string | undefined): Unit {
+  return (metricCode != null && cube.units[metricCode]) || NO_UNIT
+}
+
+/** Format a value with its unit's decimals; "—" for a missing observation. */
+export function formatValue(value: number | null | undefined, unit: Unit): string {
+  if (value == null) return '—'
+  return new Intl.NumberFormat('en-US', {
+    minimumFractionDigits: unit.decimals ?? 0,
+    maximumFractionDigits: unit.decimals ?? 2,
+  }).format(value)
+}
+
+/**
+ * The unit as written after a value: "%" hugs it, a plain count says nothing
+ * ("7,168", not "7,168 number").
+ */
+export function unitSuffix(unit: Unit): string {
+  if (!unit.label || unit.label === 'number') return ''
+  return unit.label === '%' ? '%' : ` ${unit.label}`
 }
 
 interface RawDimension {
@@ -59,6 +96,7 @@ export interface RawJsonStat {
   role?: { time?: string[]; metric?: string[]; geo?: string[] }
   dimension: Record<string, RawDimension>
   value: (number | null)[]
+  extension?: { px?: { description?: string } }
 }
 
 /** Ordered [code, position] pairs from a category index (object or array form). */
@@ -78,7 +116,7 @@ export function parseJsonStat(raw: RawJsonStat): Cube {
     const cats = orderedCategories(raw.dimension[id])
     const label = raw.dimension[id].label ?? id
     let role: DimRole = 'other'
-    if (raw.role?.time?.includes(id)) role = 'time'
+    if (raw.role?.time?.includes(id) || (!raw.role?.time?.length && looksLikeTime(id))) role = 'time'
     else if (raw.role?.geo?.includes(id) || looksLikeRegion(id, label, cats.map((c) => c.code)))
       role = 'geo'
     else if (raw.role?.metric?.includes(id)) role = 'metric'
@@ -105,20 +143,22 @@ export function parseJsonStat(raw: RawJsonStat): Cube {
     records.push({ key, value: raw.value[flat] ?? null })
   }
 
-  // Unit label from the metric dimension, if any.
+  // Each measure carries its own unit: one table can mix counts, shares and
+  // averages, and a chart must not label them all with the first one's.
   const metricDim = dims.find((d) => d.role === 'metric')
-  let unit = ''
-  if (metricDim) {
-    const rawUnit = raw.dimension[metricDim.id].category.unit
-    const first = rawUnit && Object.values(rawUnit)[0]
-    if (first?.base) unit = first.base
+  const units: Record<string, Unit> = {}
+  for (const [code, u] of Object.entries(
+    (metricDim && raw.dimension[metricDim.id].category.unit) || {},
+  )) {
+    if (u?.base) units[code] = { label: u.base === 'per cent' ? '%' : u.base, decimals: u.decimals }
   }
 
   return {
     label: raw.label ?? '',
+    description: raw.extension?.px?.description ?? '',
     source: raw.source ?? 'Statistics Finland',
     updated: raw.updated ?? '',
-    unit,
+    units,
     dims,
     records,
     timeDim: dims.find((d) => d.role === 'time')?.id,

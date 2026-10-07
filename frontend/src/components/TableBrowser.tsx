@@ -1,13 +1,13 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { Search, Folder, Table2, ChevronRight, Loader2 } from 'lucide-react'
-import { browse, search, type Lang, type SearchHit } from '../lib/pxweb'
+import { browse, cleanTitle, search, tableRef, type Lang, type SearchHit } from '../lib/pxweb'
 import { shortDate } from '../lib/dates'
-import { cleanTitle } from '../lib/titles'
 import type { DbNode } from '../types'
 
 interface Props {
   lang: Lang
-  onSelect: (path: string, id: string, title: string) => void
+  /** A table was chosen: its reference ("vaerak/11ra.px") and display title. */
+  onSelect: (ref: string, title: string) => void
   /** Shown above the subject list at the top level, when not searching. */
   home?: ReactNode
 }
@@ -15,7 +15,8 @@ interface Props {
 /**
  * Two ways to reach a table: browse the StatFin subject tree, or full-text
  * search. Search wins when there's a query; otherwise we show the current
- * folder with a breadcrumb back up.
+ * folder with a breadcrumb back up. App keeps this mounted while a table is
+ * open, so "back to tables" returns to the same search or folder.
  */
 function TableBrowser({ lang, onSelect, home }: Props) {
   const [query, setQuery] = useState('')
@@ -71,7 +72,7 @@ function TableBrowser({ lang, onSelect, home }: Props) {
     if (n.type === 'l') {
       setCrumbs((c) => [...c, { id: n.id, text: n.text }])
     } else {
-      onSelect(path, n.id, cleanTitle(n.text))
+      onSelect(tableRef(path, n.id), cleanTitle(n.text))
     }
   }
 
@@ -82,6 +83,7 @@ function TableBrowser({ lang, onSelect, home }: Props) {
         <input
           value={query}
           placeholder="Search thousands of StatFin tables… (e.g. population, wages, CO2)"
+          aria-label="Search tables"
           onChange={(e) => setQuery(e.target.value)}
         />
         {loading && <Loader2 size={16} className="spin" />}
@@ -112,11 +114,10 @@ function TableBrowser({ lang, onSelect, home }: Props) {
         {debounced
           ? hits.map((h) => (
               <li key={h.path + h.id}>
-                <button onClick={() => onSelect(h.path, h.id, cleanTitle(h.title))}>
+                <button onClick={() => onSelect(tableRef(h.path, h.id), cleanTitle(h.title))}>
                   <Table2 size={16} className="ico-table" />
                   <span className="node-text">{cleanTitle(h.title)}</span>
-                  {h.published && <span className="node-date">{shortDate(h.published)}</span>}
-                  <span className="node-path">{h.path.replace(/^\//, '')}</span>
+                  {h.published && <span className="node-date">updated {shortDate(h.published)}</span>}
                 </button>
               </li>
             ))
@@ -129,7 +130,7 @@ function TableBrowser({ lang, onSelect, home }: Props) {
                     <Table2 size={16} className="ico-table" />
                   )}
                   <span className="node-text">{cleanTitle(n.text)}</span>
-                  {n.updated && <span className="node-date">{shortDate(n.updated)}</span>}
+                  {n.type === 't' && n.updated && <span className="node-date">updated {shortDate(n.updated)}</span>}
                   {n.type === 'l' && <ChevronRight size={15} className="node-chev" />}
                 </button>
               </li>

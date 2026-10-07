@@ -8,9 +8,10 @@ function dayStart(d: Date): number {
   return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime()
 }
 
-/** "6 Oct 2026" */
+/** "2026-05-29T08:00:00" -> "29.5.2026", the date format used across the app. */
 export function shortDate(iso: string): string {
-  return new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
+  const d = new Date(iso)
+  return Number.isNaN(d.getTime()) ? '' : d.toLocaleDateString('fi-FI')
 }
 
 /** "today", "yesterday", "3 days ago", else the short date. */

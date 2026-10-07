@@ -38,6 +38,16 @@ func TestStaticFallsBackToIndex(t *testing.T) {
 	}
 }
 
+func TestStaticMissingFileIsNotFound(t *testing.T) {
+	// A browser asking for a script must get a 404, not index.html — otherwise
+	// a missing chunk fails as an opaque MIME-type error in the console.
+	for _, path := range []string{"/assets/maplibre-gl-worker.mjs", "/assets/index-old.js", "/favicon.ico"} {
+		if rec := get(t, testSite(), path); rec.Code != http.StatusNotFound {
+			t.Errorf("%s: want 404, got %d %q", path, rec.Code, rec.Body.String())
+		}
+	}
+}
+
 func TestStaticNeverServesHTMLForAPI(t *testing.T) {
 	for _, path := range []string{"/api", "/api/", "/api/nope"} {
 		if rec := get(t, testSite(), path); rec.Code != http.StatusNotFound {

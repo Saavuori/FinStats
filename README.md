@@ -2,8 +2,9 @@
 
 **An easy way to explore and visualise open data from Statistics Finland
 (Tilastokeskus).** Search or browse the whole StatFin database, turn any table
-into a chart, and draw regional tables as a choropleth over Finland's
-municipalities — all in the browser.
+into a chart or a downloadable data table, and draw regional tables as a
+choropleth of Finland's municipalities, regions or wellbeing services counties
+— all in the browser, with a shareable link for every view.
 
 > Data © Statistics Finland, licensed [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/).
 > finstats is an independent project and is not affiliated with Statistics Finland.
@@ -12,20 +13,29 @@ municipalities — all in the browser.
 
 ## What it does
 
-- **Start from what matters** — the landing page offers hand-picked key
-  indicators (inflation, unemployment, GDP, housing prices, …) and a feed of
-  Statistics Finland's latest releases.
+- **Start from what matters** — the landing page offers popular tables
+  (population, unemployment, income, apartment prices, inflation, GDP,
+  emissions, births, life expectancy) and a feed of Statistics Finland's latest
+  releases.
 - **Browse or search** thousands of StatFin tables (population, economy,
-  housing, environment, transport, …) via the PxWeb API, with each table's
-  last-updated date.
+  housing, environment, transport, …) via the PxWeb API, each with its update
+  date.
 - **One generic UI for every table** — controls are generated from each table's
   metadata, so there is no per-table code. Every dimension becomes a searchable
-  multi-select.
-- **Charts** — line and bar, with the time dimension on the x-axis, a selectable
-  series splitter, and unit-aware tooltips.
-- **Maps** — for any table with a regional dimension, a MapLibre choropleth of
-  the 300+ municipalities, joined to Statistics Finland's WFS boundary geometry,
-  with a period/measure selector and a value ramp.
+  multi-select with an "only" shortcut.
+- **Charts** — line and bar. Every combination of the values you pick becomes a
+  series (nothing is dropped silently); measures in different units get a panel
+  each instead of sharing an axis; lines are scaled to their data so trends
+  show; non-time comparisons become rankable horizontal bars.
+- **Table view and CSV** — the numbers behind every chart, and a tidy CSV
+  (one row per value, codes and labels, UTF-8 for Excel) of whatever is shown.
+- **Maps** — for any table with a regional dimension, a MapLibre choropleth at
+  every level the table carries: municipalities, sub-regions, regions,
+  wellbeing services counties, major regions and more, joined to Statistics
+  Finland's WFS boundary geometry. Quantile classes keep skewed measures
+  readable; every other dimension gets its own picker.
+- **Shareable links** — the table, picks and view live in the URL, so any view
+  can be bookmarked, sent to someone, reloaded or reached with Back/Forward.
 - **Light / dark theme**, an explicit toggle persisted across visits.
 
 Because Statistics Finland's APIs send CORS headers, the browser talks to them
@@ -58,6 +68,10 @@ go run ./cmd/server
 cd frontend
 npm install
 npm run dev
+
+# unit tests (vitest) and lint
+npm test
+npm run lint
 ```
 
 Open <http://localhost:5173>. In dev, Vite serves the SPA and the backend only

@@ -1,13 +1,16 @@
-import { useEffect, useMemo, useState } from 'react'
-import { Map as MapIcon, TrendingUp, Table2, ChevronDown } from 'lucide-react'
-import { browse, recentTables, type Lang, type SearchHit } from '../lib/pxweb'
-import { FEATURED, type Featured } from '../lib/featured'
+import { useEffect, useMemo, useState, type MouseEvent } from 'react'
+import { BarChart3, Map as MapIcon, Table2, ChevronDown } from 'lucide-react'
+import { browse, cleanTitle, recentTables, tableRef, type Lang, type SearchHit } from '../lib/pxweb'
+import { STARTERS } from '../lib/starters'
+import { writeUrl } from '../lib/urlstate'
 import { relativeDay, shortDate } from '../lib/dates'
-import { cleanTitle } from '../lib/titles'
 
 interface Props {
   lang: Lang
-  onSelect: (path: string, id: string, title: string, preset?: Featured) => void
+  /** In-app navigation for a starter link (modified clicks open a new tab). */
+  onLink: (e: MouseEvent<HTMLAnchorElement>, href: string) => void
+  /** A release's table was chosen: its reference and display title. */
+  onSelect: (ref: string, title: string) => void
 }
 
 /** Release-feed length, and tables listed per release before "more". */
@@ -24,10 +27,10 @@ interface Release {
 
 /**
  * The landing page's two ways in for someone who doesn't know what to search
- * for: hand-picked key indicators, and a feed of what Statistics Finland has
+ * for: hand-picked popular tables, and a feed of what Statistics Finland has
  * published most recently.
  */
-function Discover({ lang, onSelect }: Props) {
+function Discover({ lang, onLink, onSelect }: Props) {
   const [hits, setHits] = useState<SearchHit[] | null>(null)
   const [subjects, setSubjects] = useState<Map<string, string>>(new Map())
   const [failed, setFailed] = useState(false)
@@ -48,14 +51,11 @@ function Discover({ lang, onSelect }: Props) {
     }
   }, [lang])
 
-  // "/khi" + "11xs.px" -> its search hit, to date the featured cards.
-  const byTable = useMemo(
-    () => new Map((hits ?? []).map((h) => [`${h.path.replace(/^\//, '')}/${h.id}`, h])),
+  // "khi/15b5.px" -> when it was published, to date the starter cards.
+  const published = useMemo(
+    () => new Map((hits ?? []).map((h) => [tableRef(h.path, h.id), h.published])),
     [hits],
   )
-
-  // Once the live list is in, drop featured tables that no longer exist.
-  const featured = hits ? FEATURED.filter((f) => byTable.has(`${f.path}/${f.id}`)) : FEATURED
 
   const releases = useMemo(() => {
     const groups = new Map<string, Release>()
@@ -88,20 +88,21 @@ function Discover({ lang, onSelect }: Props) {
   return (
     <div className="discover">
       <section>
-        <h3 className="section-title">Key indicators</h3>
+        <h3 className="section-title">Popular tables</h3>
         <ul className="featured">
-          {featured.map((f) => {
-            const updated = byTable.get(`${f.path}/${f.id}`)?.published
+          {STARTERS.map((s) => {
+            const href = writeUrl(s.state)
+            const updated = published.get(s.state.table)
             return (
-              <li key={f.path + f.id}>
-                <button onClick={() => onSelect(f.path, f.id, f.title, f)}>
+              <li key={s.title}>
+                <a href={href} onClick={(e) => onLink(e, href)}>
                   <span className="featured-head">
-                    {f.view === 'map' ? <MapIcon size={15} /> : <TrendingUp size={15} />}
-                    {f.title}
+                    {s.state.view === 'map' ? <MapIcon size={15} /> : <BarChart3 size={15} />}
+                    {s.title}
                   </span>
-                  <span className="featured-blurb">{f.blurb}</span>
+                  <span className="featured-blurb">{s.blurb}</span>
                   {updated && <span className="featured-date">Updated {shortDate(updated)}</span>}
-                </button>
+                </a>
               </li>
             )
           })}
@@ -127,7 +128,7 @@ function Discover({ lang, onSelect }: Props) {
                 <ul className="node-list release-tables">
                   {shown.map((t) => (
                     <li key={t.id}>
-                      <button onClick={() => onSelect(r.path, t.id, cleanTitle(t.title))}>
+                      <button onClick={() => onSelect(tableRef(r.path, t.id), cleanTitle(t.title))}>
                         <Table2 size={15} className="ico-table" />
                         <span className="node-text">{cleanTitle(t.title)}</span>
                       </button>
