@@ -1,32 +1,49 @@
-// Categorical series colours and the sequential ramp for the choropleth.
-// These are the validated, colourblind-safe hues used across the sibling
-// data-viz apps; the order is fixed so a given series keeps its colour.
+// Chart and map colours: the validated data-viz palette the sibling apps share
+// (bensa's fuels use the same hexes). Each categorical slot is one hue stepped
+// separately for the light and dark surface — never an automatic flip — and
+// the slot order is the colourblind-safety mechanism, so it is never reshuffled.
+// Validated with the data-viz validator against this app's surfaces
+// (#fcfcfb light, #1a1a19 dark): worst adjacent CVD ΔE 9.1 light / 8.4 dark,
+// normal-vision ΔE ≥ 19.3. Three light slots sit below 3:1 contrast, which is
+// why every chart has a Table view twin.
 
-export const SERIES_COLORS = [
-  '#3987e5', // blue
-  '#e6994d', // orange
-  '#3aa76d', // green
-  '#c65f8e', // magenta
-  '#8a6fd6', // purple
-  '#d1a730', // gold
-  '#4bb3c4', // teal
-  '#d4635f', // coral
-]
+import type { Theme } from './theme'
 
-export function seriesColor(index: number): string {
-  return SERIES_COLORS[index % SERIES_COLORS.length]
+const SERIES: Record<Theme, string[]> = {
+  light: ['#2a78d6', '#eb6834', '#1baf7a', '#eda100', '#e87ba4', '#008300', '#4a3aa7', '#e34948'],
+  dark: ['#3987e5', '#d95926', '#199e70', '#c98500', '#d55181', '#008300', '#9085e9', '#e66767'],
 }
 
 /**
- * Sequential ramp (light -> saturated blue) for choropleth fills. `t` is the
- * value's position in [0,1] within the current data range. Interpolates in
- * sRGB, which is good enough for a single-hue ramp.
+ * A chart carries at most this many series. A ninth would need a generated or
+ * reused hue, which colourblind readers can't tell from an existing one; the
+ * rest stay reachable in the Table view.
  */
-export function choroplethColor(t: number): string {
-  const clamped = Math.max(0, Math.min(1, t))
-  // Low end: pale blue-grey. High end: deep accent blue.
-  const from = [222, 235, 247]
-  const to = [8, 74, 145]
-  const rgb = from.map((f, i) => Math.round(f + (to[i] - f) * clamped))
-  return `rgb(${rgb[0]}, ${rgb[1]}, ${rgb[2]})`
+export const MAX_SERIES = SERIES.light.length
+
+/** Colour of categorical slot `slot` (0-based, < MAX_SERIES). */
+export function seriesColor(slot: number, theme: Theme): string {
+  return SERIES[theme][slot] ?? SERIES[theme][0]
+}
+
+/**
+ * Sequential blue ramp, steps 100–700, for the choropleth. One hue,
+ * light -> dark; in the dark theme the anchor flips so "more" is the step
+ * furthest from the surface either way.
+ */
+const SEQUENTIAL = ['#cde2fb', '#9ec5f4', '#6da7ec', '#3987e5', '#256abf', '#184f95', '#0d366b']
+
+/** Past seven classes adjacent colours blur together; the table carries more. */
+export const MAX_CLASSES = SEQUENTIAL.length
+
+/** Fill colours for `count` ordered classes (lowest first), spread over the ramp. */
+export function classColors(count: number, theme: Theme): string[] {
+  const n = Math.max(1, Math.min(count, MAX_CLASSES))
+  // A lone class takes the mid step, which reads on either surface.
+  if (n === 1) return [SEQUENTIAL[3]]
+  const steps = Array.from(
+    { length: n },
+    (_, i) => SEQUENTIAL[Math.round((i * (MAX_CLASSES - 1)) / (n - 1))],
+  )
+  return theme === 'dark' ? steps.reverse() : steps
 }

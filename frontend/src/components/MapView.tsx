@@ -1,118 +1,150 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import * as maplibregl from 'maplibre-gl'
+import 'maplibre-gl/dist/maplibre-gl.css'
+// MapLibre 6 ships its worker as a separate ES module and finds it at runtime
+// next to its own URL — a lookup the bundler can't follow, so the worker never
+// reached the build and the map stayed blank. `?worker&url` makes Vite bundle
+// it (together with the shared chunk it imports) and hand back its URL. The
+// same fix as ratikka's Map.tsx.
 import maplibreWorkerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url'
 import type { FeatureCollection } from 'geojson'
-import type { Cube } from '../lib/jsonstat'
-import { fetchMunicipalities, municipalityCode } from '../lib/wfs'
-import { choroplethColor, SERIES_COLORS } from '../lib/palette'
+import { formatValue, unitOf, unitSuffix, type Cube } from '../lib/jsonstat'
+import { featureNumber, fetchBoundaries, type LevelAreas } from '../lib/wfs'
+import { classColors, MAX_CLASSES } from '../lib/palette'
+import { classOf, classRange, quantileClasses } from '../lib/classes'
 import { BASEMAP_STYLES, REGION_STROKE, type Theme } from '../lib/theme'
+import Caption from './Caption'
 
-interface Props {
-  cube: Cube
-  theme: Theme
-}
-
-// MapLibre 6 looks for its worker at `./maplibre-gl-worker.mjs` next to the
-// bundle, which Vite never emits — in production that path fell through to
-// index.html and every map stayed blank. Let Vite bundle the worker (with the
-// shared chunk it imports) and point MapLibre at the emitted file.
 maplibregl.setWorkerUrl(maplibreWorkerUrl)
 
-const FINLAND: [number, number] = [25.7, 64.9]
+interface Props {
+  /** Holds every area of `level` (App widens the query for the map). */
+  cube: Cube
+  theme: Theme
+  levels: LevelAreas[]
+  level: LevelAreas
+  onLevel: (key: string) => void
+}
+
+// Mainland Finland and Åland, so the country fills the frame at any width.
+const FINLAND: maplibregl.LngLatBoundsLike = [
+  [19.1, 59.6],
+  [31.6, 70.1],
+]
 const SOURCE = 'regions'
 const EMPTY: FeatureCollection = { type: 'FeatureCollection', features: [] }
+// Areas without a value stay unfilled, outline only, so "no data" can't be
+// mistaken for the lowest class.
+const NO_DATA = 'rgba(0, 0, 0, 0)'
+
+const legendNumber = (v: number) =>
+  new Intl.NumberFormat('en-US', { maximumSignificantDigits: 3 }).format(v)
 
 /**
- * Choropleth of a geographic table over Finland's municipalities. One period
- * and one measure are shown at a time (chosen in the toolbar); the fill is a
- * sequential ramp across the current value range. Geometry comes from the WFS
- * service, joined to StatFin municipality codes by their bare digits.
+ * Choropleth of a geographic table: one value per area, in quantile classes on
+ * a single-hue ramp. Exactly one value of every other dimension is drawn at a
+ * time, each picked in the toolbar. Geometry comes from the WFS service,
+ * joined to the StatFin area codes by number.
  */
-function MapView({ cube, theme }: Props) {
+function MapView({ cube, theme, levels, level, onLevel }: Props) {
   const container = useRef<HTMLDivElement>(null)
   // The map whose style has finished loading, or null while none has. A theme
   // switch replaces the map, and data pushed into it before its new style
   // loads would throw ("Style is not done loading"), so only a map that has
   // fired `load` is ever stored here.
   const [map, setMap] = useState<maplibregl.Map | null>(null)
-  const [geo, setGeo] = useState<FeatureCollection | null>(null)
-  const [geoFailed, setGeoFailed] = useState(false)
+  const [geo, setGeo] = useState<{ layer: string; fc: FeatureCollection } | null>(null)
+  const [failedLayer, setFailedLayer] = useState<string | null>(null)
+  const geoFailed = failedLayer === level.level.layer
 
   // App renders MapView only for a cube with a geographic dimension.
   const geoDim = cube.dims.find((d) => d.id === cube.geoDim)!
-  const timeDim = cube.dims.find((d) => d.id === cube.timeDim)
-  const metricDim = cube.dims.find((d) => d.id === cube.metricDim)
+  const pickable = cube.dims.filter((d) => d.id !== geoDim.id && d.categories.length > 1)
+  const fixed = cube.dims
+    .filter((d) => d.id !== geoDim.id && d.categories.length === 1)
+    .map((dim) => ({ dim, category: dim.categories[0] }))
 
-  // The toolbar picks outlive a requery only while the new cube still has
-  // them; otherwise fall back to the latest period and the first measure.
-  const [periodPick, setPeriod] = useState('')
-  const [measurePick, setMeasure] = useState('')
-  const period = timeDim?.categories.some((c) => c.code === periodPick)
-    ? periodPick
-    : (timeDim?.categories.at(-1)?.code ?? '')
-  const measure = metricDim?.categories.some((c) => c.code === measurePick)
-    ? measurePick
-    : (metricDim?.categories[0]?.code ?? '')
+  // Toolbar picks outlive a requery only while the new cube still has them;
+  // otherwise the latest period and the first value of everything else.
+  const [picks, setPicks] = useState<Record<string, string>>({})
+  const pins = useMemo(() => {
+    const p: Record<string, string> = {}
+    for (const d of cube.dims) {
+      if (d.id === geoDim.id) continue
+      const want = picks[d.id]
+      p[d.id] = d.categories.some((c) => c.code === want)
+        ? want
+        : (d.id === cube.timeDim ? d.categories.at(-1) : d.categories[0])!.code
+    }
+    return p
+  }, [cube, geoDim, picks])
+  const unit = unitOf(cube, cube.metricDim ? pins[cube.metricDim] : undefined)
 
-  // Load municipality polygons once.
+  // Load the level's polygons.
   useEffect(() => {
     let cancelled = false
-    fetchMunicipalities()
-      .then((fc) => !cancelled && setGeo(fc))
-      .catch(() => !cancelled && setGeoFailed(true))
+    const layer = level.level.layer
+    fetchBoundaries(level.level)
+      .then((fc) => {
+        if (cancelled) return
+        setGeo({ layer, fc })
+        setFailedLayer((f) => (f === layer ? null : f))
+      })
+      .catch(() => !cancelled && setFailedLayer(layer))
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [level])
 
-  // municipality code (bare digits) -> value, for the current period/measure.
-  // Other areas in the dimension (the whole country, regions, sub-regions)
-  // are skipped: they have no polygon and would stretch the colour ramp.
-  const { values, min, max } = useMemo(() => {
-    const pinned: Record<string, string> = {}
-    for (const d of cube.dims) {
-      if (d.id === geoDim.id) continue
-      if (d.id === timeDim?.id) pinned[d.id] = period
-      else if (d.id === metricDim?.id) pinned[d.id] = measure
-      else pinned[d.id] = d.categories[0]?.code
-    }
+  // The level's polygons, once loaded (a stale level's are ignored).
+  const shapes = geo && geo.layer === level.level.layer ? geo.fc : null
+  const drawable = useMemo(
+    () =>
+      shapes &&
+      new Set(shapes.features.map((f) => featureNumber(level.level, f.properties)).filter((n) => n != null)),
+    [shapes, level],
+  )
+
+  // Area number -> value for the pinned slice. Only areas with a polygon
+  // count: placeholders such as "MK91 Unknown" share the level's code
+  // pattern, and would otherwise skew the classes without ever being drawn.
+  const values = useMemo(() => {
     const m = new Map<string, number>()
-    let lo = Infinity
-    let hi = -Infinity
+    if (!drawable) return m
+    const numOf = new Map(level.areas.map((a) => [a.code, a.num]))
     for (const rec of cube.records) {
-      if (!Object.entries(pinned).every(([k, v]) => rec.key[k] === v)) continue
       if (rec.value == null) continue
-      const code = municipalityCode(rec.key[geoDim.id])
-      if (code == null) continue
-      m.set(code, rec.value)
-      lo = Math.min(lo, rec.value)
-      hi = Math.max(hi, rec.value)
+      if (!Object.entries(pins).every(([k, v]) => rec.key[k] === v)) continue
+      const num = numOf.get(rec.key[geoDim.id])
+      if (num != null && drawable.has(num)) m.set(num, rec.value)
     }
-    return { values: m, min: lo, max: hi }
-  }, [cube, geoDim, timeDim, metricDim, period, measure])
+    return m
+  }, [cube, geoDim, pins, level, drawable])
 
-  // Build a coloured GeoJSON: attach value, unit and fill colour to each
-  // feature, so the hover popup reads everything from the feature itself.
+  const classes = useMemo(() => quantileClasses([...values.values()], MAX_CLASSES), [values])
+  const colors = useMemo(
+    () => classColors(classes ? classes.breaks.length + 1 : 1, theme),
+    [classes, theme],
+  )
+
+  // Attach fill colour and display text to each feature, so the hover popup
+  // reads everything from the feature itself.
   const coloured = useMemo(() => {
-    if (!geo) return null
-    const span = max - min || 1
-    const features = geo.features.map((f) => {
-      const code = municipalityCode(String(f.properties?.kunta ?? ''))
-      const value = code == null ? undefined : values.get(code)
-      const fill =
-        value == null ? 'rgba(128,128,128,0.15)' : choroplethColor((value - min) / span)
+    if (!shapes) return null
+    const features = shapes.features.map((f) => {
+      const num = featureNumber(level.level, f.properties)
+      const value = num == null ? undefined : values.get(num)
       return {
         ...f,
         properties: {
           ...f.properties,
-          _value: value ?? null,
-          _unit: cube.unit,
-          _fill: fill,
+          _fill: value == null || !classes ? NO_DATA : colors[classOf(value, classes.breaks)],
+          _text: value == null ? 'No data' : formatValue(value, unit) + unitSuffix(unit),
         },
       }
     })
     return { type: 'FeatureCollection', features } as FeatureCollection
-  }, [geo, values, min, max, cube.unit])
+  }, [shapes, level, values, classes, colors, unit])
 
   // Create the map, with its layers and hover popup, when the theme (basemap)
   // changes.
@@ -121,8 +153,8 @@ function MapView({ cube, theme }: Props) {
     const m = new maplibregl.Map({
       container: container.current,
       style: BASEMAP_STYLES[theme],
-      center: FINLAND,
-      zoom: 4.1,
+      bounds: FINLAND,
+      fitBoundsOptions: { padding: 12 },
       attributionControl: { compact: true },
     })
     m.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'top-right')
@@ -138,7 +170,7 @@ function MapView({ cube, theme }: Props) {
         id: 'region-line',
         type: 'line',
         source: SOURCE,
-        paint: { 'line-color': REGION_STROKE[theme], 'line-width': 0.4 },
+        paint: { 'line-color': REGION_STROKE[theme], 'line-width': 0.5 },
       })
 
       const popup = new maplibregl.Popup({ closeButton: false, closeOnClick: false })
@@ -161,80 +193,92 @@ function MapView({ cube, theme }: Props) {
     }
   }, [theme])
 
-  // Push the colouring into the loaded map whenever it changes.
+  // Push the colouring into the loaded map whenever it changes. A theme switch
+  // recolours and replaces the map in one commit, so this can still see the
+  // map being torn down (its source already gone); the replacement gets the
+  // data once its own style has loaded.
   useEffect(() => {
-    if (!map || !coloured) return
-    ;(map.getSource(SOURCE) as maplibregl.GeoJSONSource).setData(coloured)
+    const source = map?.getSource(SOURCE) as maplibregl.GeoJSONSource | undefined
+    source?.setData(coloured ?? EMPTY)
   }, [map, coloured])
-
-  const fmt = (v: number) => new Intl.NumberFormat('en-US').format(Math.round(v))
 
   return (
     <div className="map-wrap">
       <div className="chart-toolbar">
-        {timeDim && (
+        {levels.length > 1 && (
           <label className="mini-select">
-            Period
-            <select value={period} onChange={(e) => setPeriod(e.target.value)}>
-              {timeDim.categories.map((c) => (
+            Areas
+            <select value={level.level.key} onChange={(e) => onLevel(e.target.value)}>
+              {levels.map((l) => (
+                <option key={l.level.key} value={l.level.key}>
+                  {l.level.label}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
+        {pickable.map((d) => (
+          <label className="mini-select" key={d.id}>
+            {d.label}
+            <select value={pins[d.id]} onChange={(e) => setPicks((p) => ({ ...p, [d.id]: e.target.value }))}>
+              {d.categories.map((c) => (
                 <option key={c.code} value={c.code}>
                   {c.label}
                 </option>
               ))}
             </select>
           </label>
-        )}
-        {metricDim && metricDim.categories.length > 1 && (
-          <label className="mini-select">
-            Measure
-            <select value={measure} onChange={(e) => setMeasure(e.target.value)}>
-              {metricDim.categories.map((c) => (
-                <option key={c.code} value={c.code}>
-                  {c.label}
-                </option>
-              ))}
-            </select>
-          </label>
-        )}
+        ))}
       </div>
 
+      <Caption fixed={fixed} />
+
       {geoFailed && (
-        <div className="error-row">Could not load the municipality boundaries from Statistics Finland.</div>
+        <div className="error-row">Could not load the area boundaries from Statistics Finland.</div>
       )}
       <div className="map-canvas" ref={container} />
 
-      {Number.isFinite(min) && Number.isFinite(max) && (
-        <div className="legend">
-          <span>{fmt(min)}</span>
-          <div
-            className="legend-ramp"
-            style={{
-              background: `linear-gradient(90deg, ${choroplethColor(0)}, ${choroplethColor(0.5)}, ${choroplethColor(1)})`,
-            }}
-          />
-          <span>{fmt(max)}</span>
-          <span className="legend-unit">{cube.unit}</span>
+      {classes && (
+        <div className="legend" aria-label="Map legend">
+          {colors.map((c, i) => {
+            const [lo, hi] = classRange(classes, i)
+            return (
+              <span className="legend-item" key={i}>
+                <span className="swatch" style={{ background: c }} />
+                {lo === hi ? legendNumber(lo) : `${legendNumber(lo)}–${legendNumber(hi)}`}
+              </span>
+            )
+          })}
+          <span className="legend-item">
+            <span className="swatch swatch-empty" />
+            No data
+          </span>
+          {unitSuffix(unit) && <span className="legend-unit">{unitSuffix(unit).trim()}</span>}
         </div>
       )}
-      <p className="map-hint" style={{ borderColor: SERIES_COLORS[0] }}>
-        Grey municipalities have no value for this selection. Geometry &amp; data ©
-        Statistics Finland, CC BY 4.0.
+      <p className="map-hint">
+        {drawable &&
+          // "Regions" -> "regions", but "ELY centres" keeps its acronym.
+          `${values.size} of ${drawable.size} ${level.level.label.replace(/^[A-Z](?![A-Z])/, (c) => c.toLowerCase())} have a value. `}
+        Each colour holds about the same number of areas. Geometry &amp; data © Statistics Finland,
+        CC BY 4.0.
       </p>
     </div>
   )
 }
 
 /**
- * Hover popup for one municipality. Built from DOM nodes rather than an HTML
- * string: the name and unit come from third-party responses, and text nodes
- * cannot be interpreted as markup.
+ * Hover popup for one area. Built from DOM nodes rather than an HTML string:
+ * the name comes from a third-party response, and text nodes cannot be
+ * interpreted as markup.
  */
 function popupContent(p: Record<string, unknown>): HTMLElement {
-  const val = p._value == null ? '—' : new Intl.NumberFormat('en-US').format(Number(p._value))
   const el = document.createElement('div')
-  const name = document.createElement('strong')
+  const value = document.createElement('strong')
+  value.textContent = String(p._text ?? '')
+  const name = document.createElement('div')
   name.textContent = String(p.name ?? p.nimi ?? '')
-  el.append(name, document.createElement('br'), `${val} ${p._unit ?? ''}`)
+  el.append(value, name)
   return el
 }
 

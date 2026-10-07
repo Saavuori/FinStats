@@ -1,22 +1,51 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { BarChart3, Map as MapIcon, Moon, Sun, Loader2, ArrowLeft, Database } from 'lucide-react'
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from 'react'
+import {
+  ArrowLeft,
+  BarChart3,
+  Check,
+  Database,
+  Download,
+  Link2,
+  Loader2,
+  Map as MapIcon,
+  Moon,
+  Sun,
+  Table2,
+} from 'lucide-react'
 import TableBrowser from './components/TableBrowser'
 import DimensionSelect from './components/DimensionSelect'
 import ChartView from './components/ChartView'
-import MapView from './components/MapView'
+import TableView from './components/TableView'
+import ErrorBoundary from './components/ErrorBoundary'
 import VersionBadge from './components/VersionBadge'
-import { getMeta, queryTable, tableUrl, isRegion, type Lang } from './lib/pxweb'
-import { municipalityCode } from './lib/wfs'
+import { cleanTitle, getMeta, isRegion, queryTable, tableUrl, type Lang } from './lib/pxweb'
+import { mapLevels, pickLevel } from './lib/wfs'
 import { parseJsonStat, type Cube } from './lib/jsonstat'
+import { cubeToCsv, download } from './lib/csv'
+import { STARTERS } from './lib/starters'
+import {
+  readUrl,
+  resolveSelections,
+  selectionDiff,
+  writeUrl,
+  type ChartKind,
+  type View,
+} from './lib/urlstate'
 import { loadTheme, saveTheme, type Theme } from './lib/theme'
 import type { TableMeta } from './types'
+
+// MapLibre is most of the bundle; fetch it the first time a map is shown.
+const MapView = lazy(() => import('./components/MapView'))
 
 const CELL_LIMIT = 120000
 
 // The UI is English-only for now; PxWeb also serves 'fi' and 'sv'.
 const LANG: Lang = 'en'
 
+const HOME_TITLE = 'finstats — Statistics Finland data explorer'
+
 interface Picked {
+  ref: string
   url: string
   title: string
   meta: TableMeta
@@ -26,12 +55,19 @@ export default function App() {
   const [theme, setTheme] = useState<Theme>(loadTheme)
   const [picked, setPicked] = useState<Picked | null>(null)
   const [selections, setSelections] = useState<Record<string, string[]>>({})
+  const [view, setView] = useState<View>('chart')
+  const [kind, setKind] = useState<ChartKind | undefined>()
+  const [xId, setXId] = useState<string | undefined>()
+  const [levelKey, setLevelKey] = useState<string | undefined>()
+  // The data, and the query it answers: a view switch can leave the two out
+  // of step until the new query lands.
   const [cube, setCube] = useState<Cube | null>(null)
-  const [view, setView] = useState<'chart' | 'map'>('chart')
+  const [cubeKey, setCubeKey] = useState('')
 
   const [loadingMeta, setLoadingMeta] = useState(false)
   const [loadingData, setLoadingData] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [copied, setCopied] = useState(false)
 
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme)
@@ -45,66 +81,142 @@ export default function App() {
     })
   }
 
-  const hasGeo = useMemo(
-    () => !!picked && picked.meta.variables.some(isRegion),
-    [picked],
-  )
+  // ---- Navigation -------------------------------------------------------
+  // The address bar says which table is open and how it is viewed, so every
+  // view can be bookmarked, shared, reloaded and reached with Back/Forward.
 
-  // Pick a table -> fetch metadata -> seed sensible default selections. Only
-  // the latest pick may land: a slower response for a table clicked earlier
-  // must not replace it.
-  const metaRequest = useRef(0)
-  const onSelectTable = useCallback(
-    async (path: string, id: string, title: string) => {
-      const request = ++metaRequest.current
-      const url = tableUrl(LANG, path, id)
-      setLoadingMeta(true)
-      setError(null)
+  const pickedRef = useRef<Picked | null>(null)
+  useEffect(() => {
+    pickedRef.current = picked
+  }, [picked])
+
+  // Only the latest navigation may land: a slower metadata response for a
+  // table left behind must not replace the current one.
+  const navRequest = useRef(0)
+
+  /** Show what the URL describes. `title` is the browser's name for a table. */
+  const applyUrl = useCallback(async (title?: string) => {
+    const request = ++navRequest.current
+    const state = readUrl(window.location.search)
+    // Leaving a table forgets its data — and which query it answered, or
+    // reopening it with the same picks would wait for data that never comes.
+    const leave = () => {
+      setPicked(null)
       setCube(null)
-      setView('chart')
+      setCubeKey('')
+    }
+    setError(null)
+    if (!state) {
+      leave()
+      setLoadingMeta(false)
+      return
+    }
+
+    let meta = pickedRef.current?.ref === state.table ? pickedRef.current.meta : null
+    if (!meta) {
+      leave()
+      setLoadingMeta(true)
       try {
-        const meta = await getMeta(url)
-        if (request !== metaRequest.current) return
-        const seed: Record<string, string[]> = {}
-        for (const v of meta.variables) {
-          if (v.time) {
-            seed[v.code] = v.values.slice(-20).map((x) => x.code)
-          } else if (isRegion(v)) {
-            const whole = v.values.find((x) => x.code === 'SSS')
-            seed[v.code] = [whole?.code ?? v.values[0].code]
-          } else {
-            seed[v.code] = [v.values[0].code]
-          }
-        }
-        setSelections(seed)
-        setPicked({ url, title, meta })
+        meta = await getMeta(tableUrl(LANG, state.table))
       } catch (e) {
-        if (request === metaRequest.current) setError(errText(e))
-      } finally {
-        if (request === metaRequest.current) setLoadingMeta(false)
+        if (request === navRequest.current) {
+          setError(errText(e))
+          setLoadingMeta(false)
+        }
+        return
       }
-    },
-    [],
+      if (request !== navRequest.current) return
+      setLoadingMeta(false)
+      setPicked({ ref: state.table, url: tableUrl(LANG, state.table), title: title ?? meta.title, meta })
+    }
+    setSelections(resolveSelections(meta, state.sel))
+    setView(state.view)
+    setKind(state.kind)
+    setXId(state.x)
+    setLevelKey(state.level)
+  }, [])
+
+  useEffect(() => {
+    // Reading the address bar on mount is syncing with an external system,
+    // exactly what an effect is for.
+    // oxlint-disable-next-line react/set-state-in-effect
+    applyUrl()
+    const onPop = () => applyUrl()
+    window.addEventListener('popstate', onPop)
+    return () => window.removeEventListener('popstate', onPop)
+  }, [applyUrl])
+
+  /** Go to an explorer URL ('' = the table list) as a new history entry. */
+  function navigate(search: string, title?: string) {
+    window.history.pushState(null, '', search || window.location.pathname)
+    applyUrl(title)
+  }
+
+  /** Same-tab navigation for in-app links; modified clicks open a new tab. */
+  function followLink(e: MouseEvent<HTMLAnchorElement>, search: string) {
+    if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return
+    e.preventDefault()
+    navigate(search)
+  }
+
+  // Mirror picks and view into the URL. Replace, don't push: each checkbox
+  // would otherwise become a Back-button step.
+  useEffect(() => {
+    if (!picked) return
+    const next = writeUrl({
+      table: picked.ref,
+      view,
+      kind,
+      x: xId,
+      level: levelKey,
+      sel: selectionDiff(picked.meta, selections),
+    })
+    if (next !== window.location.search) window.history.replaceState(null, '', next)
+  }, [picked, selections, view, kind, xId, levelKey])
+
+  // ---- What to query ----------------------------------------------------
+
+  const geoVar = useMemo(() => picked?.meta.variables.find(isRegion), [picked])
+  const levels = useMemo(
+    () => (geoVar ? mapLevels(geoVar.code, geoVar.label, geoVar.values.map((v) => v.code)) : []),
+    [geoVar],
   )
+  // A map link for a table without boundaries falls back to the chart.
+  const shownView: View = view === 'map' && !levels.length ? 'chart' : view
+  const level =
+    shownView === 'map' && geoVar
+      ? pickLevel(levels, selections[geoVar.code] ?? [], levelKey)
+      : undefined
+
+  // The map draws every area of its level, whatever the sidebar picked; the
+  // picks stay as they were for the chart and table.
+  const query = useMemo(
+    () =>
+      level && geoVar
+        ? { ...selections, [geoVar.code]: level.areas.map((a) => a.code) }
+        : selections,
+    [selections, level, geoVar],
+  )
+  const queryKey = picked ? `${picked.url}\n${JSON.stringify(query)}` : ''
 
   // Estimated response size = product of selected counts.
   const cells = useMemo(
-    () => Object.values(selections).reduce((n, v) => n * Math.max(v.length, 1), 1),
-    [selections],
+    () => Object.values(query).reduce((n, v) => n * Math.max(v.length, 1), 1),
+    [query],
   )
 
   // Derived rather than stored, so it clears as soon as the selection shrinks.
   const tooLarge =
     cells > CELL_LIMIT
-      ? `Selection is too large (${cells.toLocaleString()} cells). Narrow it below ${CELL_LIMIT.toLocaleString()}.`
+      ? `Selection is too large (${cells.toLocaleString('en-US')} cells). Narrow it below ${CELL_LIMIT.toLocaleString('en-US')}.`
       : null
 
-  // Requery whenever the selection changes (debounced). A response that
-  // arrives after the selection or table has moved on is dropped, so an older
-  // query can never overwrite a newer one's chart.
+  // Requery whenever the query changes (debounced). A response that arrives
+  // after the query or table has moved on is dropped, so an older query can
+  // never overwrite a newer one's chart.
   useEffect(() => {
-    if (!picked) return
-    const anyEmpty = picked.meta.variables.some((v) => (selections[v.code]?.length ?? 0) === 0)
+    if (!picked || queryKey === cubeKey) return
+    const anyEmpty = picked.meta.variables.some((v) => (query[v.code]?.length ?? 0) === 0)
     if (anyEmpty || cells > CELL_LIMIT) return
 
     let stale = false
@@ -112,8 +224,11 @@ export default function App() {
       setLoadingData(true)
       setError(null)
       try {
-        const raw = await queryTable(picked.url, selections)
-        if (!stale) setCube(parseJsonStat(raw))
+        const raw = await queryTable(picked.url, query)
+        if (!stale) {
+          setCube(parseJsonStat(raw))
+          setCubeKey(queryKey)
+        }
       } catch (e) {
         if (!stale) setError(errText(e))
       } finally {
@@ -125,21 +240,32 @@ export default function App() {
       window.clearTimeout(timer)
       setLoadingData(false)
     }
-  }, [picked, selections, cells])
+  }, [picked, query, queryKey, cubeKey, cells])
 
-  // Switching to the map needs every municipality; expand the geo dimension.
-  function switchView(next: 'chart' | 'map') {
-    setView(next)
-    if (next !== 'map' || !picked) return
-    const geoVar = picked.meta.variables.find(isRegion)
-    if (!geoVar) return
-    const municipalities = geoVar.values
-      .filter((v) => municipalityCode(v.code) != null)
-      .map((v) => v.code)
-    if (municipalities.length && selections[geoVar.code]?.length !== municipalities.length) {
-      setSelections((s) => ({ ...s, [geoVar.code]: municipalities }))
+  // ---- Page --------------------------------------------------------------
+
+  const title = cube?.description ? cleanTitle(cube.description) : picked?.title
+  useEffect(() => {
+    document.title = title ? `${title} — finstats` : HOME_TITLE
+  }, [title])
+
+  async function copyLink() {
+    try {
+      await navigator.clipboard.writeText(window.location.href)
+      setCopied(true)
+      window.setTimeout(() => setCopied(false), 1600)
+    } catch {
+      /* clipboard unavailable (permissions, insecure context): the address bar still has it */
     }
   }
+
+  function downloadCsv() {
+    if (!cube || !picked) return
+    const id = picked.ref.split('/').pop()!.replace(/\.px$/, '')
+    download(`statfin-${id}.csv`, cubeToCsv(cube))
+  }
+
+  const fresh = cubeKey === queryKey
 
   return (
     <div className="app">
@@ -156,56 +282,114 @@ export default function App() {
         </button>
       </header>
 
-      {!picked ? (
-        <main className="landing">
-          <p className="lede">
-            Explore thousands of open statistical tables from Tilastokeskus — population,
-            economy, housing, environment and more — as interactive charts and maps.
-            Search or browse to begin.
-          </p>
-          {loadingMeta && <div className="loading-row"><Loader2 className="spin" /> Loading table…</div>}
-          {error && <div className="error-row">{error}</div>}
-          <TableBrowser lang={LANG} onSelect={onSelectTable} />
-        </main>
-      ) : (
+      {/* Kept mounted while a table is open, so going back finds the same search. */}
+      <main className="landing" hidden={!!picked}>
+        <p className="lede">
+          Explore thousands of open statistical tables from Tilastokeskus — population, economy,
+          housing, environment and more — as interactive charts, maps and tables you can share and
+          download. Start from a popular table, or search and browse below.
+        </p>
+
+        <nav className="starters" aria-label="Popular tables">
+          {STARTERS.map((s) => {
+            const href = writeUrl(s.state)
+            return (
+              <a key={s.title} href={href} onClick={(e) => followLink(e, href)}>
+                {s.state.view === 'map' ? <MapIcon size={15} /> : <BarChart3 size={15} />}
+                {s.title}
+              </a>
+            )
+          })}
+        </nav>
+
+        {loadingMeta && (
+          <div className="loading-row">
+            <Loader2 className="spin" /> Loading table…
+          </div>
+        )}
+        {error && !picked && <div className="error-row">{error}</div>}
+        <TableBrowser
+          lang={LANG}
+          onSelect={(ref, name) => navigate(writeUrl({ table: ref, view: 'chart', sel: {} }), name)}
+        />
+      </main>
+
+      {picked && (
         <main className="explorer">
           <div className="explorer-head">
-            <button className="back" onClick={() => { setPicked(null); setCube(null); setError(null) }}>
+            <button className="back" onClick={() => navigate('')}>
               <ArrowLeft size={15} /> Tables
             </button>
-            <h2>{picked.title}</h2>
+            <h2>{title}</h2>
           </div>
 
           <div className="panel">
             <aside className="controls">
               <div className="controls-title">Dimensions</div>
-              {picked.meta.variables.map((v) => (
-                <DimensionSelect
-                  key={v.code}
-                  variable={v}
-                  selected={selections[v.code] ?? []}
-                  onChange={(vals) => setSelections((s) => ({ ...s, [v.code]: vals }))}
-                />
-              ))}
+              {picked.meta.variables.map((v) =>
+                level && v.code === geoVar?.code ? (
+                  <div className="dim dim-locked" key={v.code}>
+                    <div className="dim-head">
+                      <span className="dim-label">
+                        {v.label}
+                        <span className="dim-tag">map</span>
+                      </span>
+                      <span className="dim-summary">all {level.areas.length}</span>
+                    </div>
+                    <p className="dim-note">
+                      The map shows every area. Your picks here still apply to the chart and table.
+                    </p>
+                  </div>
+                ) : (
+                  <DimensionSelect
+                    key={v.code}
+                    variable={v}
+                    selected={selections[v.code] ?? []}
+                    onChange={(vals) => setSelections((s) => ({ ...s, [v.code]: vals }))}
+                  />
+                ),
+              )}
               <div className="cells-note">
-                ~{cells.toLocaleString()} cells{cells > CELL_LIMIT && ' · too large'}
+                ~{cells.toLocaleString('en-US')} cells{cells > CELL_LIMIT && ' · too large'}
               </div>
             </aside>
 
             <section className="viz">
               <div className="viz-tabs">
-                <button className={view === 'chart' ? 'on' : ''} onClick={() => switchView('chart')}>
+                <button className={shownView === 'chart' ? 'on' : ''} onClick={() => setView('chart')}>
                   <BarChart3 size={15} /> Chart
                 </button>
                 <button
-                  className={view === 'map' ? 'on' : ''}
-                  onClick={() => switchView('map')}
-                  disabled={!hasGeo}
-                  title={hasGeo ? '' : 'This table has no regional dimension'}
+                  className={shownView === 'map' ? 'on' : ''}
+                  onClick={() => setView('map')}
+                  disabled={!levels.length}
+                  title={
+                    levels.length
+                      ? ''
+                      : geoVar
+                        ? 'Statistics Finland publishes no map boundaries for these areas'
+                        : 'This table has no regional dimension'
+                  }
                 >
                   <MapIcon size={15} /> Map
                 </button>
-                {loadingData && <Loader2 size={15} className="spin viz-spin" />}
+                <button className={shownView === 'table' ? 'on' : ''} onClick={() => setView('table')}>
+                  <Table2 size={15} /> Table
+                </button>
+                {loadingData && <Loader2 size={15} className="spin viz-spin" aria-label="Loading" />}
+                <div className="viz-actions">
+                  <button className="action" onClick={copyLink} title="Copy a link to exactly this view">
+                    {copied ? <Check size={15} /> : <Link2 size={15} />} {copied ? 'Copied' : 'Copy link'}
+                  </button>
+                  <button
+                    className="action"
+                    onClick={downloadCsv}
+                    disabled={!cube}
+                    title="Download the data shown, one row per value"
+                  >
+                    <Download size={15} /> CSV
+                  </button>
+                </div>
               </div>
 
               {(tooLarge ?? error) && <div className="error-row">{tooLarge ?? error}</div>}
@@ -216,13 +400,40 @@ export default function App() {
                 </div>
               )}
 
-              {cube && view === 'chart' && <ChartView cube={cube} />}
-              {cube && view === 'map' && hasGeo && cube.geoDim && <MapView cube={cube} theme={theme} />}
-
               {cube && (
-                <div className="source-line">
-                  {cube.source}
-                  {cube.updated && ` · updated ${new Date(cube.updated).toLocaleDateString('fi-FI')}`}
+                <div className={!fresh && loadingData ? 'viz-body viz-stale' : 'viz-body'}>
+                  {/* Keyed so a failed view gets a fresh try on the next table or tab. */}
+                  <ErrorBoundary key={`${picked.ref} ${shownView}`}>
+                    {shownView === 'chart' && (
+                      <ChartView
+                        key={picked.ref}
+                        cube={cube}
+                        theme={theme}
+                        kind={kind}
+                        xId={xId}
+                        onKind={setKind}
+                        onX={setXId}
+                      />
+                    )}
+                    {shownView === 'table' && <TableView cube={cube} xId={xId} onX={setXId} />}
+                    {shownView === 'map' && level && cube.geoDim && (
+                      <Suspense fallback={<div className="viz-empty">Loading map…</div>}>
+                        <MapView
+                          cube={cube}
+                          theme={theme}
+                          levels={levels}
+                          level={level}
+                          onLevel={setLevelKey}
+                        />
+                      </Suspense>
+                    )}
+                  </ErrorBoundary>
+
+                  <div className="source-line">
+                    {cube.source}
+                    {cube.updated &&
+                      ` · updated ${new Date(cube.updated).toLocaleDateString('fi-FI')}`}
+                  </div>
                 </div>
               )}
             </section>

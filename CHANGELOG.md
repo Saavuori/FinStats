@@ -3,6 +3,51 @@
 All notable changes to this project are documented here. The version headings
 match the tags CI generates on each push to `main`.
 
+## [v0.0.25] - 2026-10-06
+
+### Fixed
+- **Missing files are 404s**: the server answers a missing file with a 404
+  rather than the app's page — the reason the v0.0.23 problem surfaced only as
+  an empty map.
+- **Honest charts**: picking several values in more than one dimension no
+  longer silently drops all but the first; every combination is a series.
+  Measures in different units (a count and a percentage) no longer share one
+  axis — each unit gets its own panel — and the chart no longer labels every
+  series with the first measure's unit. Line charts are scaled to their data,
+  so a 5.1 M → 5.6 M population trend no longer looks flat.
+- **Map → chart → mess**: opening the map no longer overwrites your area picks
+  with every municipality (which left the chart drawing 308 lines).
+- **Readable maps**: values are coloured in quantile classes, so a skewed
+  measure no longer paints nearly every municipality the same pale blue; in
+  the dark theme, higher values are brighter rather than darker.
+- **Map tab**: municipality tables that use bare codes (e.g. apartment prices
+  by municipality) can now be mapped, and areas without boundaries (the
+  "Unknown" placeholders) no longer skew the colour classes.
+- **Colour-blind safety**: the chart palette is the validated one the sibling
+  apps use; the old one made series 2 and 3 indistinguishable under
+  protanopia.
+- **Docs**: the live address is `finstat.saavuori.live`; the changelog's link
+  back to the app pointed at a domain that no longer resolves.
+
+### Added
+- **Shareable links**: the table, picks and view live in the URL — bookmark,
+  reload, send, or use Back/Forward.
+- **Table view and CSV download** of the data behind every view.
+- **Maps at every area level** a table carries: sub-regions, regions,
+  wellbeing services counties, ELY and economic development centres,
+  electoral districts and major regions, not just municipalities.
+- **Popular tables** on the landing page, a value-first tooltip, a caption
+  saying what each view shows, an "only" shortcut in every dimension list,
+  rankable horizontal bars, and a picker for every dimension on the map.
+
+### Changed
+- Tables open on the last 30 years, 40 quarters or 60 months (was 20 periods
+  of any kind), and on Helsinki when a table has no national total.
+- Search shows each table once (several statistics publish the same table)
+  with its update date; going back to the list keeps your search.
+- The map library loads only when a map is first opened: the initial download
+  is about 60 % smaller.
+
 ## [v0.0.23] - 2026-10-06
 
 ### Fixed
